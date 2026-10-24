@@ -112,6 +112,57 @@ function surprise() {
   const m = nat(MOTIONS); L.motion = [...new Set([rnd(m), rnd(m)].filter(Boolean).map((x) => x.id))];
   L.preset = null; renderStep(); rebuildMain(); toast(`Surpresa: um look ${SKILLS[p.skill].name}. Troque o que não gostar.`);
 }
+// ---- head detection (MediaPipe Face Detector in the browser, no Python). Samples frames across the clip,
+// keeps the biggest face per frame, estimates head top (hair above the face box) and chin, fills the sliders.
+let faceDet = null;
+async function loadFaceDetector() {
+  if (faceDet) return faceDet;
+  const base = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10";
+  const mp = await import(`${base}/vision_bundle.mjs`);
+  const vision = await mp.FilesetResolver.forVisionTasks(`${base}/wasm`);
+  faceDet = await mp.FaceDetector.createFromOptions(vision, {
+    baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite" },
+    runningMode: "IMAGE", minDetectionConfidence: 0.5,
+  });
+  return faceDet;
+}
+async function detectHead({ silent = false } = {}) {
+  if (!UI.clip || !video.videoWidth) return toast("Escolha um clipe antes.");
+  const btn = $("#detectHead"); btn.classList.add("busy"); btn.textContent = "Detectando…";
+  if (!silent) toast("Detectando a cabeça em alguns frames do clipe…");
+  try {
+    const det = await loadFaceDetector();
+    const v = document.createElement("video"); v.muted = true; v.preload = "auto"; v.src = video.src;
+    await new Promise((ok, fail) => { v.onloadedmetadata = ok; v.onerror = () => fail(new Error("não consegui abrir o clipe para análise")); });
+    const dur = v.duration || 10, n = Math.min(9, Math.max(4, Math.round(dur / 6)));
+    const times = Array.from({ length: n }, (_, i) => Math.min(dur - 0.2, 0.8 + (dur - 1.6) * (i / Math.max(1, n - 1))));
+    const cw = UI.landscape ? 640 : 360, ch = UI.landscape ? 360 : 640;
+    const c = document.createElement("canvas"); c.width = cw; c.height = ch; const ctx = c.getContext("2d");
+    const hits = [];
+    for (const t of times) {
+      v.currentTime = t; await new Promise((ok) => { v.onseeked = ok; });
+      ctx.drawImage(v, 0, 0, cw, ch);
+      const r = det.detect(c);
+      const d = r.detections.map((x) => x.boundingBox).sort((a, b) => b.width * b.height - a.width * a.height)[0];
+      if (d) hits.push({ t, x: d.originX / cw, y: d.originY / ch, w: d.width / cw, h: d.height / ch });
+    }
+    if (!hits.length) { toast("Nenhum rosto encontrado nesses frames. Ajuste os sliders à mão."); return null; }
+    // The BlazeFace box runs roughly eyebrows→chin. Hair adds ~55 % of the box above; chin sits a hair below.
+    const q = (arr, p) => { const s = [...arr].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(p * (s.length - 1)))]; };
+    const tops = hits.map((h) => (h.y - 0.55 * h.h) * UI.H), chins = hits.map((h) => (h.y + 1.08 * h.h) * UI.H);
+    const headTop = Math.round(Math.max(60, q(tops, 0.15)) / 10) * 10;
+    const chin = Math.round(q(chins, 0.85) / 10) * 10;
+    UI.headTop = Math.min(Number($("#headTop").max), headTop);
+    UI.capTop = Math.min(Number($("#capTop").max), chin + (UI.landscape ? 20 : 40));
+    UI.face = { x: q(hits.map((h) => h.x), 0.5) * UI.W, y: q(hits.map((h) => h.y), 0.5) * UI.H, w: q(hits.map((h) => h.w), 0.5) * UI.W, h: q(hits.map((h) => h.h), 0.5) * UI.H, frames: hits.length, of: times.length };
+    syncSliders(); drawGuides(); renderStep(); rebuildMain(); autosave();
+    toast(`Cabeça detectada em ${hits.length} de ${times.length} frames: topo ≈ ${UI.headTop}px, queixo ≈ ${chin}px.`);
+    return UI.face;
+  } catch (e) {
+    toast("Detecção indisponível (precisa de internet na primeira vez): " + (e.message || e));
+    return null;
+  } finally { btn.classList.remove("busy"); btn.textContent = "Detectar cabeça"; }
+}
 const guessProject = (p) => { const m = /video-projects[\\/]([a-z0-9-]+)[\\/]/.exec(p); return m ? m[1] : null; };
 const slugify = (s) => s.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "meu-look";
 
@@ -120,11 +171,14 @@ video.addEventListener("loadedmetadata", () => {
   UI.landscape = video.videoWidth > video.videoHeight;
   UI.W = UI.landscape ? 1920 : 1080; UI.H = UI.landscape ? 1080 : 1920;
   if (UI.landscape) { UI.headTop = 300; UI.capTop = 880; } else { UI.headTop = 620; UI.capTop = 1150; }
+  UI.face = null;
+  const restored = !!UI.pendingFraming;
   if (UI.pendingFraming) { UI.headTop = UI.pendingFraming.headTop || UI.headTop; UI.capTop = UI.pendingFraming.capTop || UI.capTop; UI.pendingFraming = null; }
   $("#headTop").max = UI.H - 400; $("#capTop").max = UI.H - 200;
   syncSliders(); layoutStage();
   video.currentTime = Math.min(2, (video.duration || 4) / 3);
   renderStep(); rebuildMain();
+  if (!restored && $("#autoDetect").checked) detectHead({ silent: true });
 });
 video.addEventListener("seeked", () => { if (video.paused) capturePoster(); });
 video.addEventListener("pause", capturePoster);
@@ -161,6 +215,9 @@ function drawGuides() {
   const sf = $(".g.safe", guides);
   if (UI.landscape) { Object.assign(sf.style, { left: "96px", right: "96px", top: "96px", height: UI.H - 192 + "px" }); }
   else { Object.assign(sf.style, { left: "65px", right: "65px", top: "270px", height: 1248 - 270 + "px" }); }
+  const fb = $(".g.face", guides);
+  if (UI.face) { Object.assign(fb.style, { display: "block", left: UI.face.x + "px", top: UI.face.y + "px", width: UI.face.w + "px", height: UI.face.h + "px", right: "auto" }); }
+  else fb.style.display = "none";
   guides.style.display = $("#showGuides").checked ? "" : "none";
 }
 function syncSliders() {
@@ -246,12 +303,20 @@ function renderStep() {
   $("#stepHelp").textContent = st.help;
   const grid = $("#grid"); grid.classList.toggle("wide", UI.landscape || st.id === "review");
   $("#quick").innerHTML = UI.step === 0 ? `<span class="lbl">Começo rápido:</span>` + PRESETS.map((p) => `<button class="${L.preset === p.id ? "on" : ""}" data-p="${p.id}" title="${esc(p.desc)}"><i style="background:${p.picks.colours ? byId(COLOURS, p.picks.colours).vars.acc : "#333"}"></i>${esc(p.name)}</button>`).join("") + `<button id="surprise" title="Um look coerente de uma skill, ao acaso">🎲 Surpreenda-me</button>` : "";
+  if (st.id === "captions") {
+    UI.capFilter = UI.capFilter || "all";
+    const lds = LDS.available ? `${LDS.prontos.length} prontos · ${LDS.entradas.length} entradas` : "catálogo não encontrado";
+    $("#quick").innerHTML = `<span class="lbl">Mostrar:</span>` +
+      [["all", "Todas"], ["kit", "Kit HyperFrames"], ["lds", `Legenda Dinâmica · EffectCraft`]].map(([k, t]) => `<button class="${UI.capFilter === k ? "on" : ""}" data-f="${k}" ${k === "lds" && !LDS.available ? "disabled" : ""}>${t}</button>`).join("") +
+      `<span class="lbl status ${LDS.available ? "ok" : ""}">${LDS.available ? "✓ Catálogo LDS carregado: " + lds : "LDS: " + lds + " (Desktop\\EFEECTCRAFT EDITOR CLAUDE\\catalogo ou LDS_CATALOG)"}</span>`;
+    $$("#quick button[data-f]").forEach((b) => (b.onclick = () => { UI.capFilter = b.dataset.f; renderStep(); }));
+  }
   $$("#quick button[data-p]").forEach((b) => (b.onclick = () => applyPreset(b.dataset.p)));
   const sp = $("#surprise"); if (sp) sp.onclick = surprise;
   const s = S();
   if (st.id === "review") return renderReview(grid);
   const multi = st.id === "elements" || st.id === "motion";
-  const list = { colours: COLOURS, fonts: FONTS, hook: HOOKS, captions: CAPTIONS, elements: ELEMENTS, motion: MOTIONS }[st.id];
+  const list = st.id === "captions" && UI.capFilter === "lds" ? [] : { colours: COLOURS, fonts: FONTS, hook: HOOKS, captions: CAPTIONS, elements: ELEMENTS, motion: MOTIONS }[st.id];
   let html = list.map((o, i) => card({
     idx: i + 1, id: o.id, name: o.name, desc: o.sub || o.desc, skills: o.skills, multi, step: st.id,
     on: multi ? L[st.id].includes(o.id) : L[st.id] === o.id,
@@ -259,8 +324,8 @@ function renderStep() {
     body: frameHtml(st.id === "colours" ? withPick({ colours: o.id }) : st.id === "fonts" ? withPick({ fonts: o.id }) : s),
   })).join("");
   // Legenda Dinâmica (EffectCraft): real GIF previews from the user's catalogue
-  if (st.id === "captions" && LDS.available) {
-    html += divider("Legenda Dinâmica · EffectCraft", "Prontos do Legenda Dinâmica Studio. Prévia real do catálogo; no palco à esquerda, uma aproximação nas suas cores.");
+  if (st.id === "captions" && LDS.available && UI.capFilter !== "kit") {
+    html += divider(`Legenda Dinâmica · EffectCraft (${LDS.prontos.length})`, "Prontos do Legenda Dinâmica Studio: palavra-chave gigante, conectivos pequenos, entrada palavra por palavra. Prévia real do catálogo; no palco à esquerda, uma aproximação nas suas cores. A entrada se escolhe no passo Motion.");
     html += LDS.prontos.map((p, i) => card({ idx: list.length + i + 1, id: `lds:${p.id}`, name: p.name, desc: `${p.modelo} · entrada ${p.entrada} · saída ${p.saida}`, skills: ["legenda-dinamica-studio"], multi: false, step: "captions", on: L.captions === `lds:${p.id}`, body: gifFrame(p.gif) })).join("");
   }
   if (st.id === "motion" && LDS.available && isLds()) {
@@ -491,6 +556,9 @@ $("#back5").onclick = () => (video.currentTime = Math.max(0, video.currentTime -
 $("#fwd5").onclick = () => (video.currentTime = Math.min(video.duration || 0, video.currentTime + 5));
 $("#mute").onchange = (e) => (video.muted = e.target.checked);
 $("#showGuides").onchange = drawGuides;
+$("#detectHead").onclick = () => detectHead();
+$("#autoDetect").onchange = (e) => { try { localStorage.setItem(LS + "autoDetect", e.target.checked ? "1" : "0"); } catch {} };
+try { $("#autoDetect").checked = localStorage.getItem(LS + "autoDetect") !== "0"; } catch {}
 $("#headTop").oninput = (e) => { UI.headTop = Number(e.target.value); syncSliders(); drawGuides(); debounce(() => { renderStep(); rebuildMain(); autosave(); }); };
 $("#capTop").oninput = (e) => { UI.capTop = Number(e.target.value); syncSliders(); drawGuides(); debounce(() => { renderStep(); rebuildMain(); autosave(); }); };
 ["hook1", "hook2", "keyword", "note", "comment", "user"].forEach((k) => { $("#" + k).value = UI.text[k]; $("#" + k).oninput = (e) => { UI.text[k] = e.target.value; debounce(() => { renderStep(); rebuildMain(); }); }; });

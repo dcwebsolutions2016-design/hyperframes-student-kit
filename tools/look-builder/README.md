@@ -89,3 +89,12 @@ junto com o seu vídeo.
 
 O preview é uma aproximação em HTML/GSAP para decidir o look. A edição real continua sendo feita pela skill
 com HyperFrames, snapshots e render, como sempre.
+
+## Detecção da cabeça
+
+Ao abrir um clipe (sem rascunho salvo) o Look builder roda o MediaPipe Face Detector no próprio navegador em
+4–9 frames espalhados pelo vídeo, fica com o maior rosto de cada frame e estima o topo da cabeça (cabelo acima da
+caixa do rosto) e o queixo. Os sliders "Topo da cabeça" e "Legenda (topo)" já vêm preenchidos e um retângulo verde
+mostra o rosto detectado. O botão "Detectar cabeça" refaz; a caixa "automático ao abrir um clipe" desliga a
+detecção automática. Precisa de internet na primeira vez (modelo e wasm vêm do CDN e ficam em cache). Vídeos sem
+rosto (animações, telas) caem no aviso "Nenhum rosto encontrado" e você ajusta à mão.

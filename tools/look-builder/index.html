@@ -29,7 +29,7 @@
         <div class="empty" id="stageEmpty"><b>Escolha um clipe</b><span>Selecione um vídeo acima ou cole o caminho. Pause no frame que quiser usar como fundo dos cards.</span></div>
         <div class="cam" id="cam"><video id="video" muted playsinline preload="auto"></video></div>
         <div class="world" id="world"></div>
-        <div class="guides" id="guides"><i class="g head"></i><i class="g cap"></i><i class="g safe"></i></div>
+        <div class="guides" id="guides"><i class="g head"></i><i class="g cap"></i><i class="g safe"></i><i class="g face"></i></div>
       </div>
     </div>
     <div class="transport">
@@ -43,6 +43,7 @@
     <div class="sliders">
       <label>Topo da cabeça <input type="range" id="headTop" min="200" max="1200" step="10"><output id="headTopV"></output></label>
       <label>Legenda (topo) <input type="range" id="capTop" min="600" max="1700" step="10"><output id="capTopV"></output></label>
+      <div class="detect-row"><button class="btn sm" id="detectHead" title="Acha o rosto em alguns frames do clipe e posiciona os sliders (MediaPipe, roda no navegador)">Detectar cabeça</button><label class="chk"><input type="checkbox" id="autoDetect" checked> automático ao abrir um clipe</label></div>
     </div>
     <details class="texts">
       <summary>Texto de exemplo</summary>
