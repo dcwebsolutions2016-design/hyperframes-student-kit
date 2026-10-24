@@ -33,6 +33,22 @@ node tools/look-builder/server.mjs --clip "video-projects/meu-reel/assets/raw.mp
    e **Salvar look.json** grava em `video-projects/<slug>/look.json` e copia um prompt pronto.
 6. Cole o prompt no Claude Code. As skills Oney leem o `look.json` (regra em `.claude/skills/_perfil-oney.md`).
 
+## Legenda Dinâmica (EffectCraft)
+
+Se a pasta `C:\Users\<voce>\Desktop\EFEECTCRAFT EDITOR CLAUDE\catalogo` existir (ou `LDS_CATALOG=<pasta>` apontar
+para uma pasta com `data.json` + `gifs/`), o passo **Legendas** ganha os 14 "prontos" do Legenda Dinâmica Studio
+com os GIFs reais do catálogo, e o passo **Motion** passa a oferecer as 24 entradas quando um pronto está escolhido.
+No palco à esquerda a legenda dinâmica aparece como aproximação (palavra-chave grande, conectivos pequenos, entrada
+palavra por palavra) nas suas cores. O `look.json` grava `captions.engine = "legenda-dinamica-studio"` com pronto,
+modelo, entrada e saída, e o prompt pede a legenda via skill `/legenda` no EffectCraft enquanto o resto do look
+é montado no HyperFrames. Sem a pasta, o passo funciona só com as legendas HTML do kit.
+
+## Atalhos e rascunho
+
+← → mudam de passo, 1–9 escolhem o card, espaço dá play/pause, Esc fecha "Mais como essa". O rascunho é salvo
+sozinho no navegador por clipe e restaurado ao reabrir; se o projeto já tem `look.json`, ele é carregado.
+"🎲 Surpreenda-me" monta um look coerente de uma skill ao acaso. "Limpar" zera tudo.
+
 ## O que vai no look.json
 
 ```json
@@ -48,7 +64,8 @@ node tools/look-builder/server.mjs --clip "video-projects/meu-reel/assets/raw.mp
 }
 ```
 
-`video-projects/` é gitignorado, então o look.json fica privado junto com o seu vídeo.
+Ao lado é gravado `LOOK.md`, a mesma coisa em prosa. `video-projects/` é gitignorado, então ambos ficam privados
+junto com o seu vídeo.
 
 ## Estender
 

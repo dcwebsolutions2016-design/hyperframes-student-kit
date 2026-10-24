@@ -21,7 +21,7 @@ const MIME = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8", ".json": "application/json; charset=utf-8", ".png": "image/png", ".jpg": "image/jpeg",
   ".svg": "image/svg+xml", ".woff2": "font/woff2", ".woff": "font/woff", ".ttf": "font/ttf", ".otf": "font/otf",
-  ".mp4": "video/mp4", ".mov": "video/quicktime", ".m4v": "video/mp4", ".webm": "video/webm", ".md": "text/markdown; charset=utf-8",
+  ".gif": "image/gif", ".mp4": "video/mp4", ".mov": "video/quicktime", ".m4v": "video/mp4", ".webm": "video/webm", ".md": "text/markdown; charset=utf-8",
 };
 
 // Fonts live inside the skills. First match wins.
@@ -32,6 +32,22 @@ const FONT_DIRS = [
   ".claude/skills/vsl/template/fonts",
   ".claude/skills/anuncios-oney/template/fonts",
 ].map((d) => join(root, d));
+
+// Legenda Dinâmica Studio (EffectCraft) catalogue: GIF previews of ready-made caption styles and entrances.
+// Lives outside the kit (the user's own tool). Override with LDS_CATALOG=<folder containing data.json + gifs/>.
+const LDS_DIR = [process.env.LDS_CATALOG, join(homedir(), "Desktop", "EFEECTCRAFT EDITOR CLAUDE", "catalogo")].filter(Boolean).find((d) => existsSync(join(d, "data.json"))) || null;
+function ldsCatalog() {
+  if (!LDS_DIR) return { available: false };
+  try {
+    const d = JSON.parse(readFileSync(join(LDS_DIR, "data.json"), "utf8"));
+    const url = (f) => "/lds/" + String(f).replace(/\\/g, "/").replace(/^\/+/, "");
+    return {
+      available: true, dir: LDS_DIR,
+      prontos: (d.prontos || []).map((p, i) => ({ id: p.id || /pronto-(p\d+)/.exec(p.f)?.[1] || `p${i + 1}`, name: p.n, modelo: p.m, entrada: p.e, saida: p.s, gif: url(p.f) })),
+      entradas: (d.entradas || []).map((e) => ({ id: e.id, name: e.n, gif: url(e.f) })),
+    };
+  } catch (e) { return { available: false, error: String(e.message || e) }; }
+}
 
 const json = (res, code, obj) => { res.writeHead(code, { "content-type": MIME[".json"], "cache-control": "no-store" }); res.end(JSON.stringify(obj)); };
 const notFound = (res, msg = "not found") => json(res, 404, { error: msg });
@@ -104,6 +120,47 @@ function streamFile(req, res, abs, extraHeaders = {}) {
   createReadStream(abs).pipe(res);
 }
 
+// Human-readable twin of look.json, for the student and for skills that prefer prose.
+function lookMarkdown(L) {
+  const li = (arr) => (arr && arr.length ? arr.map((x) => `- ${x.name || x.id}`).join("\n") : "- (nenhum)");
+  const one = (x) => (x ? `${x.name || x.id}` : "(não escolhido)");
+  const st = L.sampleText || {};
+  return `# LOOK — ${L.project}
+
+Gerado pelo Look builder em ${L.savedAt}. Fonte da verdade: \`look.json\` ao lado.
+
+- Clipe: ${L.clip || "?"} (${L.orientation || "?"}, ${L.canvas ? L.canvas.width + "×" + L.canvas.height : "?"})
+- Skill esperada: ${L.skill ? `${L.skill} (${L.skillCommand})` : "a decidir"}
+- Preset de partida: ${L.preset || "do zero"}
+- Enquadramento: topo da cabeça ≈ ${L.framing ? L.framing.headTop : "?"} px · legenda em ${L.framing ? L.framing.capTop : "?"} px
+
+## Escolhas
+- Cores: ${one(L.colours)}${L.colours ? ` — acento ${L.colours.acc}, texto ${L.colours.txt}, fundo ${L.colours.bg}` : ""}
+- Fontes: ${one(L.fonts)}${L.fonts ? ` — display ${L.fonts.display}; corpo ${L.fonts.body}${L.fonts.serif ? "; serif " + L.fonts.serif : ""}${L.fonts.hand ? "; mão " + L.fonts.hand : ""}` : ""}
+- Gancho: ${one(L.hook)}
+- Legendas: ${one(L.captions)}
+
+### Elementos
+${li(L.elements)}
+
+### Motion
+${li(L.motion)}
+
+## Variações pedidas ("Mais como essa")
+${L.extras && L.extras.length ? L.extras.map((e) => `- ${e.step}: a partir de ${e.base} → ${e.ask}`).join("\n") : "- (nenhuma)"}
+
+## Notas do aluno
+${L.notes || "(sem notas)"}
+
+## Conflitos com o DESIGN.md da skill
+${L.conflicts && L.conflicts.length ? L.conflicts.map((c) => `- ⚠ ${c}`).join("\n") : "- nenhum"}
+
+## Texto de exemplo usado no preview
+- Gancho: "${st.hook1 || ""}" / "${st.hook2 || ""}"
+- Legenda: "${(st.words || []).join(" ")}" (palavra-chave: ${st.keyword || ""})
+`;
+}
+
 function readBody(req) {
   return new Promise((ok, fail) => { let b = ""; req.on("data", (c) => { b += c; if (b.length > 2e6) fail(new Error("body too large")); }); req.on("end", () => ok(b)); req.on("error", fail); });
 }
@@ -135,7 +192,14 @@ const server = createServer(async (req, res) => {
       const f = join(dir, "look.json");
       const look = { ...body.look, savedAt: new Date().toISOString(), project: slug };
       writeFileSync(f, JSON.stringify(look, null, 2) + "\n");
-      return json(res, 200, { ok: true, file: relative(root, f).split(sep).join("/") });
+      writeFileSync(join(dir, "LOOK.md"), lookMarkdown(look));
+      return json(res, 200, { ok: true, file: relative(root, f).split(sep).join("/"), md: relative(root, join(dir, "LOOK.md")).split(sep).join("/") });
+    }
+    if (p === "/api/lds") return json(res, 200, ldsCatalog());
+    if (p.startsWith("/lds/") && LDS_DIR) {
+      const f = resolve(LDS_DIR, p.slice(5));
+      if (!isUnder(f, LDS_DIR) || !existsSync(f) || !statSync(f).isFile()) return notFound(res, "lds file");
+      return streamFile(req, res, f, { "cache-control": "public, max-age=86400" });
     }
     if (p === "/vendor/gsap.min.js") {
       const g = join(root, "node_modules/gsap/dist/gsap.min.js");

@@ -1,12 +1,22 @@
 // Look builder — app. Seven steps; every card renders the chosen look over a frame of the user's own clip.
-import { SKILLS, COLOURS, FONTS, HOOKS, CAPTIONS, ELEMENTS, MOTIONS, PRESETS, CONFLICTS } from "./looks.js";
+import { SKILLS, COLOURS, FONTS, HOOKS, CAPTIONS, ELEMENTS, MOTIONS, PRESETS, CONFLICTS, ldsCaption } from "./looks.js";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const byId = (arr, id) => arr.find((x) => x.id === id);
 
+// Legenda Dinâmica Studio (EffectCraft) catalogue, loaded from /api/lds when the user has it installed.
+const LDS = { available: false, prontos: [], entradas: [] };
+const allCaptions = () => CAPTIONS.concat(LDS.prontos.map(ldsCaption));
+const capById = (id) => byId(allCaptions(), id);
+const isLds = () => typeof L.captions === "string" && L.captions.startsWith("lds:");
+async function loadLds() {
+  try { Object.assign(LDS, await fetch("/api/lds").then((x) => x.json())); } catch { LDS.available = false; }
+  if (LDS.available) { STEPS[3].help += " As \"Legenda Dinâmica\" rodam no EffectCraft (plugin do Carlos): palavra-chave gigante, conectivos pequenos, entrada palavra por palavra."; if (UI.step === 3 || UI.step === 5) renderStep(); }
+}
+
 // ------------------------------------------------------------------ state
-const L = { preset: null, skill: null, colours: null, fonts: null, hook: null, captions: null, elements: [], motion: [], extras: [], notes: "" };
+const L = { preset: null, skill: null, colours: null, fonts: null, hook: null, captions: null, ldsEntrada: null, elements: [], motion: [], extras: [], notes: "" };
 const UI = {
   step: 0, clip: null, clipProject: null, W: 1080, H: 1920, landscape: false, headTop: 620, capTop: 1150, poster: "",
   text: { hook1: "Larguei meu emprego?", hook2: "a parte que ninguém conta", words: "isso era o sonho de verdade e ninguém fala".split(" "), keyword: "sonho", note: "eu quase desisti aqui", comment: "quero esse estilo! como faz?", user: "seu_usuario" },
@@ -40,21 +50,73 @@ async function loadClips() {
   const q = new URLSearchParams(location.search).get("clip") || r.startClip || (r.clips[0] && r.clips[0].path);
   if (q) { sel.value = q; openClip(q, (r.clips.find((c) => c.path === q) || {}).project || null); }
 }
-function openClip(path, project) {
+async function openClip(path, project) {
   if (!path) return;
   UI.clip = path; UI.clipProject = project || guessProject(path);
+  restoreForClip(path);
   $("#clipName").textContent = path.split(/[\\/]/).slice(-3).join("/");
   if (!UI.slugTouched) $("#slug").value = UI.clipProject || slugify(path.split(/[\\/]/).pop().replace(/\.[^.]+$/, ""));
   video.src = `/api/clip?path=${encodeURIComponent(path)}`;
   video.load();
 }
+// ---- persistence: localStorage per clip (autosave) + look.json already saved in the project
+const LS = "look-builder:v1:";
+function snapshot() { return { L, framing: { headTop: UI.headTop, capTop: UI.capTop }, text: UI.text, step: UI.step }; }
+function autosave() { if (!UI.clip) return; try { localStorage.setItem(LS + UI.clip, JSON.stringify(snapshot())); } catch {} }
+function applyLook(j) {
+  if (!j) return false;
+  const id = (x) => (x && typeof x === "object" ? x.id : x) || null;
+  L.preset = j.preset || null; L.skill = j.skill || null;
+  L.colours = id(j.colours); L.fonts = id(j.fonts); L.hook = id(j.hook); L.captions = id(j.captions);
+  L.ldsEntrada = j.ldsEntrada || (j.captions && j.captions.lds && j.captions.lds.entradaId) || null;
+  L.elements = (j.elements || []).map(id).filter(Boolean); L.motion = (j.motion || []).map(id).filter(Boolean);
+  L.extras = j.extras || []; L.notes = j.notes || "";
+  if (j.framing) { UI.pendingFraming = j.framing; }
+  if (j.sampleText) Object.assign(UI.text, j.sampleText);
+  if (j.text) Object.assign(UI.text, j.text);
+  syncTextInputs();
+  return true;
+}
+async function restoreForClip(path) {
+  let local = null; try { local = JSON.parse(localStorage.getItem(LS + path) || "null"); } catch {}
+  const hasPicks = (x) => x && (x.colours || x.fonts || x.hook || x.captions || (x.elements || []).length || (x.motion || []).length);
+  if (local && hasPicks(local.L) && applyLook({ ...local.L, framing: local.framing, text: local.text })) { UI.step = local.step || 0; toast("Rascunho deste clipe restaurado."); return; }
+  if (UI.clipProject) {
+    const r = await fetch(`/api/look?project=${encodeURIComponent(UI.clipProject)}`).then((x) => x.json()).catch(() => ({}));
+    if (r.look && applyLook(r.look)) { toast(`look.json de ${UI.clipProject} carregado.`); renderStep(); rebuildMain(); }
+  }
+}
+function syncTextInputs() {
+  ["hook1", "hook2", "keyword", "note", "comment", "user"].forEach((k) => { const el = $("#" + k); if (el) el.value = UI.text[k] ?? ""; });
+  const w = $("#wordsIn"); if (w) w.value = (UI.text.words || []).join(" ");
+}
+function resetAll() {
+  Object.assign(L, { preset: null, skill: null, colours: null, fonts: null, hook: null, captions: null, ldsEntrada: null, elements: [], motion: [], extras: [], notes: "" });
+  try { if (UI.clip) localStorage.removeItem(LS + UI.clip); } catch {}
+  UI.step = 0; renderStep(); rebuildMain(); toast("Look limpo.");
+}
+// A coherent random look: one skill, only options native to it.
+function surprise() {
+  const pool = PRESETS.filter((p) => p.skill);
+  const p = pool[Math.floor(Math.random() * pool.length)];
+  applyPreset(p.id);
+  const nat = (arr) => arr.filter((o) => (o.skills || []).includes(p.skill));
+  const rnd = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const h = nat(HOOKS); if (h.length) L.hook = rnd(h).id;
+  const c = nat(CAPTIONS); if (c.length) L.captions = rnd(c).id;
+  const e = nat(ELEMENTS); L.elements = [...new Set([rnd(e), rnd(e), rnd(e)].filter(Boolean).map((x) => x.id))];
+  const m = nat(MOTIONS); L.motion = [...new Set([rnd(m), rnd(m)].filter(Boolean).map((x) => x.id))];
+  L.preset = null; renderStep(); rebuildMain(); toast(`Surpresa: um look ${SKILLS[p.skill].name}. Troque o que não gostar.`);
+}
 const guessProject = (p) => { const m = /video-projects[\\/]([a-z0-9-]+)[\\/]/.exec(p); return m ? m[1] : null; };
 const slugify = (s) => s.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "meu-look";
 
 video.addEventListener("loadedmetadata", () => {
+  stage.classList.add("has-clip");
   UI.landscape = video.videoWidth > video.videoHeight;
   UI.W = UI.landscape ? 1920 : 1080; UI.H = UI.landscape ? 1080 : 1920;
   if (UI.landscape) { UI.headTop = 300; UI.capTop = 880; } else { UI.headTop = 620; UI.capTop = 1150; }
+  if (UI.pendingFraming) { UI.headTop = UI.pendingFraming.headTop || UI.headTop; UI.capTop = UI.pendingFraming.capTop || UI.capTop; UI.pendingFraming = null; }
   $("#headTop").max = UI.H - 400; $("#capTop").max = UI.H - 200;
   syncSliders(); layoutStage();
   video.currentTime = Math.min(2, (video.duration || 4) / 3);
@@ -111,7 +173,16 @@ function renderNav() {
   $("#next").textContent = UI.step === STEPS.length - 1 ? "Salvar look.json" : `Próximo: ${STEPS[UI.step + 1].title}`;
   $("#extras").textContent = `${L.extras.length} extra${L.extras.length === 1 ? "" : "s"} pedido${L.extras.length === 1 ? "" : "s"}`;
 }
-function go(i) { UI.step = Math.max(0, Math.min(STEPS.length - 1, i)); renderStep(); }
+function renderPicks() {
+  const n = (arr, id) => (byId(arr, id) || {}).name;
+  const items = [
+    L.colours && ["Cores", n(COLOURS, L.colours), 0], L.fonts && ["Fontes", n(FONTS, L.fonts), 1], L.hook && ["Gancho", n(HOOKS, L.hook), 2],
+    L.captions && ["Legendas", (capById(L.captions) || {}).name, 3], L.elements.length && ["Elementos", `${L.elements.length}`, 4], L.motion.length && ["Motion", `${L.motion.length}`, 5],
+  ].filter(Boolean);
+  $("#picks").innerHTML = items.map(([k, v, i]) => `<button data-i="${i}" title="Ir para ${k}"><i></i>${k}: <b>${esc(v)}</b></button>`).join("");
+  $$("#picks button").forEach((b) => (b.onclick = () => go(Number(b.dataset.i))));
+}
+function go(i) { UI.step = Math.max(0, Math.min(STEPS.length - 1, i)); renderStep(); autosave(); }
 $("#prev").onclick = () => go(UI.step - 1);
 $("#next").onclick = () => (UI.step === STEPS.length - 1 ? save() : go(UI.step + 1));
 
@@ -127,8 +198,8 @@ function scaleWorlds() {
 function card({ idx, id, name, desc, skills = [], on, body = "", swatches, multi, step }) {
   const nat = (L.skill && skills.includes(L.skill));
   return `<article class="card ${on ? "on" : ""}" data-id="${id}">
-    <span class="num">${idx}</span>${body}${swatches ? `<div class="sw">${swatches.map((c) => `<i style="background:${c}"></i>`).join("")}</div>` : ""}
-    <div class="meta"><b>${esc(name)}</b><span>${esc(desc)}</span><div class="sk">${skills.map((s) => `<i class="${s === L.skill ? "native" : ""}">${esc((SKILLS[s] || { name: s }).name)}</i>`).join("")}${nat ? "" : ""}</div></div>
+    <span class="check">✓</span>${body}${swatches ? `<div class="sw">${swatches.map((c) => `<i style="background:${c}"></i>`).join("")}</div>` : ""}
+    <div class="meta"><span class="num">${idx}</span><b>${esc(name)}</b><span>${esc(desc)}</span><div class="sk">${skills.map((s) => `<i class="${s === L.skill ? "native" : ""}">${esc((SKILLS[s] || { name: s }).name)}</i>`).join("")}${nat ? "" : ""}</div></div>
     <div class="acts"><button class="btn take">${on ? (multi ? "Marcado ✓" : "Escolhido ✓") : multi ? "Marcar" : "Escolher"}</button><button class="btn more">Mais como essa</button></div>
     <div class="more-box"><input placeholder="o que mudar? ex.: mais fina, sem sombra…"><button class="btn sm">Pedir</button></div>
   </article>`;
@@ -136,16 +207,21 @@ function card({ idx, id, name, desc, skills = [], on, body = "", swatches, multi
 function wireCards(step, multi) {
   $$(".card").forEach((el) => {
     const id = el.dataset.id;
-    $(".take", el).onclick = () => { pick(step, id, multi); renderStep(); rebuildMain(); };
+    $(".take", el).onclick = () => { pick(step, id, multi); renderStep(); rebuildMain(); autosave(); };
     $(".more", el).onclick = () => el.classList.toggle("more");
-    $(".more-box .btn", el).onclick = () => { const v = $(".more-box input", el).value.trim(); L.extras.push({ step, base: id, ask: v || "variação parecida" }); el.classList.remove("more"); toast(`Pedido anotado: ${v || "variação parecida"} (base: ${id})`); renderNav(); };
+    $(".more-box .btn", el).onclick = () => { const v = $(".more-box input", el).value.trim(); L.extras.push({ step, base: id, ask: v || "variação parecida" }); el.classList.remove("more"); autosave(); toast(`Pedido anotado: ${v || "variação parecida"} (base: ${id})`); renderNav(); };
   });
 }
 function pick(step, id, multi) {
+  if (id.startsWith("lds-in:")) { const v = id.slice(7); L.ldsEntrada = L.ldsEntrada === v ? null : v; L.preset = null; return; }
   if (multi) { const a = L[step]; const i = a.indexOf(id); i >= 0 ? a.splice(i, 1) : a.push(id); }
   else L[step] = L[step] === id ? null : id;
+  if (step === "captions" && !isLds()) L.ldsEntrada = null;
   if (step !== "review") L.preset = null;
 }
+// GIF card body (LDS catalogue previews are 1080×420 strips)
+const gifFrame = (src) => `<div class="frame gif" style="padding-bottom:62%"><img src="${esc(src)}" alt="" loading="lazy" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain"></div>`;
+const divider = (title, sub) => `<div class="divider" style="grid-column:1/-1"><b>${esc(title)}</b><span>${esc(sub)}</span></div>`;
 
 // cycle one-word captions inside an element
 function cycleWords(tl, el, start = 0, dt = 0.34, hold = 0) {
@@ -159,40 +235,65 @@ function renderStep() {
   killCards();
   const st = STEPS[UI.step];
   renderNav();
-  $("#stepTitle").textContent = `Passo ${UI.step + 1} de 7 · ${st.title}`;
+  $("#stepKicker").textContent = `Passo ${UI.step + 1} de 7`;
+  $("#stepTitle").textContent = st.title;
+  $("#progressBar").style.width = `${((UI.step + 1) / STEPS.length) * 100}%`;
+  renderPicks();
   $("#stepHelp").textContent = st.help;
   const grid = $("#grid"); grid.classList.toggle("wide", UI.landscape || st.id === "review");
-  $("#quick").innerHTML = UI.step === 0 ? `<span class="lbl">Começo rápido:</span>` + PRESETS.map((p) => `<button class="${L.preset === p.id ? "on" : ""}" data-p="${p.id}" title="${esc(p.desc)}"><i style="background:${p.picks.colours ? byId(COLOURS, p.picks.colours).vars.acc : "#333"}"></i>${esc(p.name)}</button>`).join("") : "";
-  $$("#quick button").forEach((b) => (b.onclick = () => applyPreset(b.dataset.p)));
+  $("#quick").innerHTML = UI.step === 0 ? `<span class="lbl">Começo rápido:</span>` + PRESETS.map((p) => `<button class="${L.preset === p.id ? "on" : ""}" data-p="${p.id}" title="${esc(p.desc)}"><i style="background:${p.picks.colours ? byId(COLOURS, p.picks.colours).vars.acc : "#333"}"></i>${esc(p.name)}</button>`).join("") + `<button id="surprise" title="Um look coerente de uma skill, ao acaso">🎲 Surpreenda-me</button>` : "";
+  $$("#quick button[data-p]").forEach((b) => (b.onclick = () => applyPreset(b.dataset.p)));
+  const sp = $("#surprise"); if (sp) sp.onclick = surprise;
   const s = S();
   if (st.id === "review") return renderReview(grid);
   const multi = st.id === "elements" || st.id === "motion";
   const list = { colours: COLOURS, fonts: FONTS, hook: HOOKS, captions: CAPTIONS, elements: ELEMENTS, motion: MOTIONS }[st.id];
-  grid.innerHTML = list.map((o, i) => card({
+  let html = list.map((o, i) => card({
     idx: i + 1, id: o.id, name: o.name, desc: o.sub || o.desc, skills: o.skills, multi, step: st.id,
     on: multi ? L[st.id].includes(o.id) : L[st.id] === o.id,
     swatches: st.id === "colours" ? [o.vars.bg, o.vars.acc, o.vars.txt, o.vars.sec] : null,
     body: frameHtml(st.id === "colours" ? withPick({ colours: o.id }) : st.id === "fonts" ? withPick({ fonts: o.id }) : s),
   })).join("");
+  // Legenda Dinâmica (EffectCraft): real GIF previews from the user's catalogue
+  if (st.id === "captions" && LDS.available) {
+    html += divider("Legenda Dinâmica · EffectCraft", "Prontos do Legenda Dinâmica Studio. Prévia real do catálogo; no palco à esquerda, uma aproximação nas suas cores.");
+    html += LDS.prontos.map((p, i) => card({ idx: list.length + i + 1, id: `lds:${p.id}`, name: p.name, desc: `${p.modelo} · entrada ${p.entrada} · saída ${p.saida}`, skills: ["legenda-dinamica-studio"], multi: false, step: "captions", on: L.captions === `lds:${p.id}`, body: gifFrame(p.gif) })).join("");
+  }
+  if (st.id === "motion" && LDS.available && isLds()) {
+    html += divider("Entrada da Legenda Dinâmica", "Troca a entrada do pronto escolhido. Uma só; sem escolher, vale a entrada do pronto.");
+    html += LDS.entradas.map((e, i) => card({ idx: list.length + i + 1, id: `lds-in:${e.id}`, name: e.name, desc: `entrada "${e.id}"`, skills: ["legenda-dinamica-studio"], multi: false, step: "motion", on: L.ldsEntrada === e.id, body: gifFrame(e.gif) })).join("");
+  }
+  grid.innerHTML = html;
   wireCards(st.id, multi);
-  requestAnimationFrame(() => { scaleWorlds(); list.forEach((o, i) => fillCard(st.id, o, $$(".card")[i])); });
+  requestAnimationFrame(() => { scaleWorlds(); const cards = $$(".card"); list.forEach((o, i) => fillCard(st.id, o, cards[i])); });
 }
 
+// one-word captions cycle; LDS screens also reveal word by word
+function playCaptions(tl, root, caps, start) {
+  if (!caps) return;
+  const c = $(".caps", root); if (!c) return;
+  const dt = caps.mode === "phrase" ? 1.2 : caps.mode === "lds" ? 1.3 : 0.34;
+  cycleWords(tl, c, start, dt);
+  if (caps.mode === "phrase") $$(".w", c).forEach((x, i) => tl.from(x, { y: 16, opacity: 0, duration: 0.3 }, start + i * dt));
+  if (caps.mode === "lds") $$(".w", c).forEach((x, i) => tl.from($$(".ldw", x), { y: 14, opacity: 0, scale: 0.92, duration: 0.22, stagger: 0.18, ease: "back.out(1.6)" }, start + i * dt));
+}
 function fillCard(step, o, el) {
+  if (!el) return;
   const w = $(".world", el), camEl = $(".cam", el);
+  if (!w) return;
   const tl = gsap.timeline({ repeat: -1, repeatDelay: 0.6, paused: false });
   cardTls.push(tl);
   if (step === "colours" || step === "fonts") {
     const s = step === "colours" ? withPick({ colours: o.id }) : withPick({ fonts: o.id });
     const hook = byId(HOOKS, L.hook) || byId(HOOKS, step === "fonts" ? "serif-stack" : "big-caps");
-    const caps = byId(CAPTIONS, L.captions) || byId(CAPTIONS, "one-word-outline");
+    const caps = capById(L.captions) || byId(CAPTIONS, "one-word-outline");
     w.innerHTML = (hook.id === "none" ? byId(HOOKS, "big-caps") : hook).render(s) + caps.render(s);
     const h = $(".hook", w); if (h) hook.anim(tl, h);
-    cycleWords(tl, w, 0.4, 0.34, 1);
+    playCaptions(tl, w, caps, 0.4);
     return;
   }
   if (step === "hook") { w.innerHTML = o.render(S()); const h = $(".hook", w); if (h) o.anim(tl, h); tl.to({}, { duration: 1.2 }); return; }
-  if (step === "captions") { w.innerHTML = o.render(S()); cycleWords(tl, w, 0.1, o.mode === "phrase" ? 1.1 : 0.34, 1); if (o.mode === "phrase") $$(".w", w).forEach((x, i) => tl.from(x, { y: 16, opacity: 0, duration: 0.3 }, i * 1.1)); return; }
+  if (step === "captions") { w.innerHTML = o.render(S()); playCaptions(tl, w, o, 0.1); tl.to({}, { duration: 0.8 }); return; }
   if (step === "elements") {
     w.innerHTML = o.render(S());
     const e = $(".el", w); if (!e) return;
@@ -229,13 +330,13 @@ function rebuildMain() {
   if (mainTl) mainTl.kill();
   const s = S();
   gsap.set(cam, { clearProps: "all" });
-  const hook = byId(HOOKS, L.hook), caps = byId(CAPTIONS, L.captions);
+  const hook = byId(HOOKS, L.hook), caps = capById(L.captions);
   const els = L.elements.map((id) => byId(ELEMENTS, id)).filter(Boolean);
   world.innerHTML = (hook ? hook.render(s) : "") + (caps ? caps.render(s) : "") + els.map((e) => e.render(s)).join("");
   mainTl = gsap.timeline({ repeat: -1, repeatDelay: 0.8 });
   const h = $(".hook", world);
   if (h && hook) { hook.anim(mainTl, h); mainTl.to(h, { opacity: 0, duration: 0.25 }, 3.2); }
-  if (caps) { const c = $(".caps", world); cycleWords(mainTl, c, 0.3, caps.mode === "phrase" ? 1.2 : 0.34); if (caps.mode === "phrase") $$(".w", c).forEach((x, i) => mainTl.from(x, { y: 16, opacity: 0, duration: 0.3 }, 0.3 + i * 1.2)); }
+  playCaptions(mainTl, world, caps, 0.3);
   const motions = L.motion.map((m) => byId(MOTIONS, m)).filter(Boolean);
   const camM = motions.filter((m) => m.camera), objM = motions.filter((m) => !m.camera);
   $$(".el", world).forEach((e, i) => {
@@ -250,9 +351,10 @@ function rebuildMain() {
     mainTl.to(e, { opacity: 0, duration: 0.25 }, t0 + 2.6);
   });
   camM.forEach((m, i) => { const t = gsap.timeline(); m.anim(t, null, cam); mainTl.add(t, 3 + i * 3); });
-  const total = Math.max(5, 3.2 + $$(".el", world).length * 1.5 + 1.5, caps ? 0.3 + $$(".w", world).length * 0.34 + 0.5 : 0);
+  const total = Math.max(5, 3.2 + $$(".el", world).length * 1.5 + 1.5, caps ? 0.3 + $$(".w", world).length * (caps.mode === "lds" ? 1.3 : caps.mode === "phrase" ? 1.2 : 0.34) + 0.5 : 0);
   mainTl.to({}, { duration: 0.1 }, total);
   $("#jsonPre").textContent = JSON.stringify(lookJson(), null, 2);
+  autosave();
 }
 
 // ------------------------------------------------------------------ review
@@ -260,9 +362,16 @@ function guessSkill() {
   if (L.skill) return L.skill;
   const votes = {};
   const add = (o) => o && (o.skills || []).forEach((k) => (votes[k] = (votes[k] || 0) + 1));
-  add(byId(COLOURS, L.colours)); add(byId(FONTS, L.fonts)); add(byId(HOOKS, L.hook)); add(byId(CAPTIONS, L.captions));
+  add(byId(COLOURS, L.colours)); add(byId(FONTS, L.fonts)); add(byId(HOOKS, L.hook)); if (!isLds()) add(capById(L.captions));
   L.elements.forEach((id) => add(byId(ELEMENTS, id))); L.motion.forEach((id) => add(byId(MOTIONS, id)));
   return Object.entries(votes).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+}
+function captionsJson() {
+  const c = capById(L.captions); if (!c) return null;
+  if (c.mode !== "lds") return { id: L.captions, name: c.name };
+  const ent = byId(LDS.entradas, L.ldsEntrada);
+  return { id: L.captions, name: c.name, engine: "legenda-dinamica-studio", skillCommand: "/legenda",
+    lds: { pronto: c.lds.id, prontoName: c.lds.name, modelo: c.lds.modelo, entradaPadrao: c.lds.entrada, saida: c.lds.saida, entradaId: L.ldsEntrada, entradaName: ent ? ent.name : null } };
 }
 function conflicts(skill) { return skill ? CONFLICTS.filter((c) => c.skill === skill && c.test(L)).map((c) => c.msg) : []; }
 function lookJson() {
@@ -275,7 +384,7 @@ function lookJson() {
     colours: L.colours ? { id: L.colours, name: name(COLOURS, L.colours), ...byId(COLOURS, L.colours).vars } : null,
     fonts: L.fonts ? { id: L.fonts, name: name(FONTS, L.fonts), display: byId(FONTS, L.fonts).display, body: byId(FONTS, L.fonts).body, serif: byId(FONTS, L.fonts).serif || null, hand: byId(FONTS, L.fonts).hand || null } : null,
     hook: L.hook ? { id: L.hook, name: name(HOOKS, L.hook) } : null,
-    captions: L.captions ? { id: L.captions, name: name(CAPTIONS, L.captions) } : null,
+    captions: captionsJson(), ldsEntrada: L.ldsEntrada,
     elements: L.elements.map((id) => ({ id, name: name(ELEMENTS, id) })),
     motion: L.motion.map((id) => ({ id, name: name(MOTIONS, id) })),
     sampleText: UI.text, extras: L.extras, notes: L.notes, conflicts: conflicts(skill),
@@ -291,7 +400,7 @@ Siga video-projects/${slug}/look.json (gerado pelo Look builder) em todas as dec
 - Gancho: ${j.hook?.name || "—"} · Legendas: ${j.captions?.name || "—"}
 - Elementos: ${list(j.elements)}
 - Motion: ${list(j.motion)}
-- Topo da cabeça ≈ ${UI.headTop}px, legenda em ${UI.capTop}px (${j.orientation}).${j.extras.length ? `\n- Variações pedidas: ${j.extras.map((e) => `${e.base} → ${e.ask}`).join("; ")}` : ""}${j.notes ? `\n- Notas: ${j.notes}` : ""}${j.conflicts.length ? `\n- Atenção, o look conflita com a skill: ${j.conflicts.join(" ")} Resolva com o aluno antes de montar.` : ""}
+- Topo da cabeça ≈ ${UI.headTop}px, legenda em ${UI.capTop}px (${j.orientation}).${j.captions && j.captions.lds ? `\n- LEGENDAS no EffectCraft (skill legenda-dinamica-studio, /legenda): pronto "${j.captions.lds.prontoName}" (${j.captions.lds.modelo}), entrada ${j.captions.lds.entradaName || j.captions.lds.entradaPadrao}, saída ${j.captions.lds.saida}. Deixe a faixa da legenda livre na composição HyperFrames e entregue words.json para o LDS.` : ""}${j.extras.length ? `\n- Variações pedidas: ${j.extras.map((e) => `${e.base} → ${e.ask}`).join("; ")}` : ""}${j.notes ? `\n- Notas: ${j.notes}` : ""}${j.conflicts.length ? `\n- Atenção, o look conflita com a skill: ${j.conflicts.join(" ")} Resolva com o aluno antes de montar.` : ""}
 Mostre o mapa de beats antes de montar e não publique nada.`;
 }
 function renderReview(grid) {
@@ -299,7 +408,7 @@ function renderReview(grid) {
   const row = (k, v) => `<li><b>${k}:</b> ${v || "<em style='color:var(--faint)'>não escolhido</em>"}</li>`;
   grid.innerHTML = `<div class="review" style="grid-column:1/-1">
     <div class="box"><h3>Seu look</h3><ul>
-      ${row("Cores", j.colours?.name)}${row("Fontes", j.fonts?.name)}${row("Gancho", j.hook?.name)}${row("Legendas", j.captions?.name)}
+      ${row("Cores", j.colours?.name)}${row("Fontes", j.fonts?.name)}${row("Gancho", j.hook?.name)}${row("Legendas", j.captions ? j.captions.name + (j.captions.lds ? ` <em style="color:var(--dim)">(EffectCraft · entrada ${esc(j.captions.lds.entradaName || j.captions.lds.entradaPadrao)})</em>` : "") : null)}
       ${row("Elementos", j.elements.map((x) => x.name).join(", "))}${row("Motion", j.motion.map((x) => x.name).join(", "))}
       ${row("Enquadramento", `cabeça ${UI.headTop}px · legenda ${UI.capTop}px · ${j.orientation}`)}</ul>
       ${L.extras.length ? `<h3 style="margin-top:14px">Variações pedidas</h3><ul>${L.extras.map((e, i) => `<li>${esc(e.base)} → ${esc(e.ask)} <a href="#" data-x="${i}">remover</a></li>`).join("")}</ul>` : ""}
@@ -315,7 +424,7 @@ function renderReview(grid) {
   </div>`;
   $$(".skillpick button", grid).forEach((b) => (b.onclick = () => { L.skill = b.dataset.s === L.skill ? null : b.dataset.s; renderStep(); }));
   $$("[data-x]", grid).forEach((a) => (a.onclick = (e) => { e.preventDefault(); L.extras.splice(Number(a.dataset.x), 1); renderStep(); }));
-  $("#notes").oninput = (e) => { L.notes = e.target.value; $("#promptPre").textContent = promptText(); };
+  $("#notes").oninput = (e) => { L.notes = e.target.value; autosave(); $("#promptPre").textContent = promptText(); };
 }
 
 // ------------------------------------------------------------------ presets, save, prompt
@@ -332,7 +441,7 @@ async function save() {
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) return toast("Slug inválido: minúsculas, números e hífens (ex.: meu-reel-01).");
   const r = await fetch("/api/look", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ project: slug, look: lookJson() }) }).then((x) => x.json());
   if (r.error) return toast("Erro: " + r.error);
-  toast(`Salvo em ${r.file}. Agora cole o prompt no Claude.`);
+  toast(`Salvo em ${r.file} (+ LOOK.md). Prompt copiado: cole no Claude.`);
   try { await navigator.clipboard.writeText(promptText()); } catch {}
 }
 $("#save").onclick = save;
@@ -342,13 +451,24 @@ $("#copyPrompt").onclick = async () => { try { await navigator.clipboard.writeTe
 // ------------------------------------------------------------------ misc wiring
 $("#clipSelect").onchange = (e) => openClip(e.target.value, e.target.selectedOptions[0]?.dataset.project || null);
 $("#clipLoad").onclick = () => openClip($("#clipPath").value.trim(), null);
-$("#play").onclick = () => { if (video.paused) { video.play(); $("#play").textContent = "Pause"; } else { video.pause(); $("#play").textContent = "Play"; } };
+$("#play").onclick = () => { if (video.paused) { video.play(); if (mainTl) mainTl.restart(); $("#play").textContent = "Pause"; } else { video.pause(); $("#play").textContent = "Play"; } };
+$("#reset").onclick = () => { if (confirm("Limpar todas as escolhas deste clipe?")) resetAll(); };
+$("#copyJson").onclick = async () => { try { await navigator.clipboard.writeText(JSON.stringify(lookJson(), null, 2)); toast("JSON copiado."); } catch { toast("Não deu para copiar."); } };
+// keyboard: ← → steps · 1–9 pick the Nth card · Esc closes "mais como essa" boxes
+window.addEventListener("keydown", (e) => {
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+  if (e.key === "ArrowRight") go(UI.step + 1);
+  else if (e.key === "ArrowLeft") go(UI.step - 1);
+  else if (/^[1-9]$/.test(e.key)) { const c = $$(".card")[Number(e.key) - 1]; if (c) $(".take", c).click(); }
+  else if (e.key === "Escape") $$(".card.more").forEach((c) => c.classList.remove("more"));
+  else if (e.key === " ") { e.preventDefault(); $("#play").click(); }
+});
 $("#back5").onclick = () => (video.currentTime = Math.max(0, video.currentTime - 5));
 $("#fwd5").onclick = () => (video.currentTime = Math.min(video.duration || 0, video.currentTime + 5));
 $("#mute").onchange = (e) => (video.muted = e.target.checked);
 $("#showGuides").onchange = drawGuides;
-$("#headTop").oninput = (e) => { UI.headTop = Number(e.target.value); syncSliders(); drawGuides(); debounce(() => { renderStep(); rebuildMain(); }); };
-$("#capTop").oninput = (e) => { UI.capTop = Number(e.target.value); syncSliders(); drawGuides(); debounce(() => { renderStep(); rebuildMain(); }); };
+$("#headTop").oninput = (e) => { UI.headTop = Number(e.target.value); syncSliders(); drawGuides(); debounce(() => { renderStep(); rebuildMain(); autosave(); }); };
+$("#capTop").oninput = (e) => { UI.capTop = Number(e.target.value); syncSliders(); drawGuides(); debounce(() => { renderStep(); rebuildMain(); autosave(); }); };
 ["hook1", "hook2", "keyword", "note", "comment", "user"].forEach((k) => { $("#" + k).value = UI.text[k]; $("#" + k).oninput = (e) => { UI.text[k] = e.target.value; debounce(() => { renderStep(); rebuildMain(); }); }; });
 $("#wordsIn").value = UI.text.words.join(" ");
 $("#wordsIn").oninput = (e) => { UI.text.words = e.target.value.trim().split(/\s+/).filter(Boolean).slice(0, 14); debounce(() => { renderStep(); rebuildMain(); }); };
@@ -370,6 +490,6 @@ let toastT; function toast(msg) { const t = $("#toast"); t.textContent = msg; t.
 function esc(s) { return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
 // boot
-syncSliders(); layoutStage(); renderStep(); rebuildMain(); loadClips();
+syncSliders(); layoutStage(); renderStep(); rebuildMain(); loadLds(); loadClips();
 
 window.__lb = { L, UI, rebuildMain, renderStep, lookJson };

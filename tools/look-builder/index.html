@@ -9,9 +9,12 @@
 </head>
 <body>
 <header class="top">
-  <div class="brand"><b>Your look</b><span>Monte o look passo a passo. Cada passo usa o que você escolheu antes.</span></div>
-  <nav class="steps" id="steps"></nav>
-  <div class="tabs"><button class="tab on" data-view="look">Look</button><button class="tab" data-view="json">JSON</button></div>
+  <div class="top-row">
+    <div class="brand"><b>Your look</b><span>Monte o look passo a passo. Cada passo usa o que você escolheu antes.</span></div>
+    <div class="tabs"><button class="tab on" data-view="look">Look</button><button class="tab" data-view="json">JSON</button><button class="tab" id="copyJson" title="Copiar look.json">⧉ copiar</button><button class="tab danger" id="reset" title="Limpar todas as escolhas">Limpar</button></div>
+  </div>
+  <nav class="steps" id="steps" aria-label="Passos"></nav>
+  <div class="progress"><i id="progressBar"></i></div>
 </header>
 
 <main class="main">
@@ -23,6 +26,7 @@
     </div>
     <div class="stage-wrap">
       <div class="stage" id="stage">
+        <div class="empty" id="stageEmpty"><b>Escolha um clipe</b><span>Selecione um vídeo acima ou cole o caminho. Pause no frame que quiser usar como fundo dos cards.</span></div>
         <div class="cam" id="cam"><video id="video" muted playsinline preload="auto"></video></div>
         <div class="world" id="world"></div>
         <div class="guides" id="guides"><i class="g head"></i><i class="g cap"></i><i class="g safe"></i></div>
@@ -52,12 +56,15 @@
       <button class="btn sm" id="fromTranscript">Usar a transcrição do projeto</button>
     </details>
     <p class="hint" id="previewHint">Previewing: <span id="clipName">—</span></p>
+    <p class="hint">Atalhos: ← → passos · 1–9 escolhe o card · espaço play/pause · Esc fecha "mais como essa". O rascunho salva sozinho por clipe.</p>
   </aside>
 
   <section class="panel" id="panel">
     <div class="step-head">
-      <h2 id="stepTitle">Passo 1 de 7</h2>
+      <div class="step-kicker" id="stepKicker">Passo 1 de 7</div>
+      <h2 id="stepTitle">Cores</h2>
       <p id="stepHelp"></p>
+      <div class="picks" id="picks"></div>
       <div class="quick" id="quick"></div>
     </div>
     <div class="grid" id="grid"></div>
@@ -66,14 +73,13 @@
 </main>
 
 <footer class="bottom">
-  <button class="btn" id="prev">Voltar</button>
-  <span class="extras" id="extras">0 extras</span>
-  <span class="save-row">
-    <input id="slug" placeholder="slug do projeto (video-projects/…)" spellcheck="false">
-    <button class="btn" id="save">Salvar look.json</button>
-    <button class="btn" id="copyPrompt">Copiar prompt</button>
-  </span>
-  <button class="btn primary" id="next">Próximo</button>
+  <div class="bottom-left"><button class="btn" id="prev">← Voltar</button><span class="extras" id="extras">0 extras</span></div>
+  <div class="save-row">
+    <label class="slug-wrap"><span>video-projects/</span><input id="slug" placeholder="meu-reel" spellcheck="false"></label>
+    <button class="btn" id="copyPrompt" title="Copia o prompt pronto para o Claude">Copiar prompt</button>
+    <button class="btn" id="save" title="Grava look.json e LOOK.md no projeto">Salvar look.json</button>
+  </div>
+  <button class="btn primary" id="next">Próximo →</button>
 </footer>
 <div class="toast" id="toast"></div>
 
