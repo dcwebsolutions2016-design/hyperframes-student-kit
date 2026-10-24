@@ -4,7 +4,8 @@ import "./looks.zee.mjs";      // effects from the zeemagede reel (frame-by-fram
 import "./looks.castilho.mjs"; // the 35 effects from castilhoia.com
 import "./looks.ajene.mjs";    // our versions of the editing.ajenepinnock.com templates
 import "./looks.tenfold.mjs";  // the three Ten Fold looks
-import { installBrandNat } from "./looks.brandnat.mjs"; // Brand Nat Style Pack codes, data read by the server
+import { installBrandNat } from "./looks.brandnat.mjs";
+import { sketchFor } from "./sketch.mjs"; // face-free layout sketches for the template cards // Brand Nat Style Pack codes, data read by the server
 
 // Brand Nat pack (105 codes) — options are added at runtime when the server finds the pack.
 const BN = { available: false, finishes: [], dir: null };
@@ -229,7 +230,8 @@ function capturePoster() {
 
 function layoutStage() {
   const wrap = $(".stage-wrap");
-  const maxW = wrap.clientWidth - 20, maxH = Math.max(320, window.innerHeight * 0.52);
+  const narrow = window.innerWidth < 900;
+  const maxW = wrap.clientWidth - 20, maxH = Math.max(240, window.innerHeight * (narrow ? 0.34 : 0.52));
   let w = UI.landscape ? maxW : Math.min(maxW, maxH * UI.W / UI.H);
   let h = w * UI.H / UI.W; if (h > maxH) { h = maxH; w = h * UI.W / UI.H; }
   stage.style.width = w + "px"; stage.style.height = h + "px";
@@ -257,10 +259,10 @@ function syncSliders() {
 // ------------------------------------------------------------------ steps nav
 function renderNav() {
   const counts = { colours: L.colours ? 1 : 0, fonts: L.fonts ? 1 : 0, hook: L.hook ? 1 : 0, captions: L.captions ? 1 : 0, elements: L.elements.length, motion: L.motion.length, review: 0 };
-  $("#steps").innerHTML = STEPS.map((s, i) => `<button class="${i === UI.step ? "on" : ""} ${counts[s.id] ? "done" : ""}" data-i="${i}"><span class="n">${i + 1}</span>${s.title}${counts[s.id] > 1 ? `<span class="cnt">${counts[s.id]}</span>` : ""}</button>`).join("");
+  $("#steps").innerHTML = STEPS.map((s, i) => `<button class="${i === UI.step ? "on" : ""} ${counts[s.id] ? "done" : ""}" data-i="${i}"><span class="n">${i + 1}</span><span class="tt">${s.title}</span>${counts[s.id] > 1 ? `<span class="cnt">${counts[s.id]}</span>` : ""}</button>`).join("");
   $$("#steps button").forEach((b) => (b.onclick = () => go(Number(b.dataset.i))));
   $("#prev").disabled = UI.step === 0;
-  $("#next").textContent = UI.step === STEPS.length - 1 ? "Salvar look.json" : `Próximo: ${STEPS[UI.step + 1].title}`;
+  const nx = $("#next .tx"); if (nx) nx.textContent = UI.step === STEPS.length - 1 ? "Salvar look.json" : `Próximo: ${STEPS[UI.step + 1].title}`;
   $("#extras").textContent = `${L.extras.length} extra${L.extras.length === 1 ? "" : "s"} pedido${L.extras.length === 1 ? "" : "s"}`;
 }
 function renderPicks() {
@@ -326,7 +328,7 @@ function presetCard(p, big = false) {
   const img = PRESET_IMG[p.id];
   const frame = !p.skill ? `<div class="pframe blank">∅</div>`
     : img ? `<div class="pframe" style="padding-bottom:${Math.min(ratio, 100)}%"><img src="${img}" alt="" loading="lazy"></div>`
-    : `<div class="pframe" style="padding-bottom:${ratio}%"><div class="cam" style="${UI.poster ? `background-image:url(${UI.poster})` : ""}"></div><div class="world" style="width:${UI.W}px;height:${UI.H}px"></div><i class="play">▶</i></div>`;
+    : `<div class="pframe ${big ? "has-sketch" : ""}" style="padding-bottom:${big ? 177.8 : ratio}%">${big ? `<div class="sk">${sketchFor(p, (byId(COLOURS, p.picks.colours) || COLOURS[0]).vars.acc, isLds() ? L.captions : null)}</div>` : ""}<div class="cam" style="${UI.poster ? `background-image:url(${UI.poster})` : ""}"></div><div class="world" style="width:${UI.W}px;height:${UI.H}px"></div><i class="play">▶</i></div>`;
   const acc = p.picks.colours ? (byId(COLOURS, p.picks.colours) || {}).vars?.acc || "#333" : "#333";
   return `<button class="preset ${big ? "big" : ""} ${L.preset === p.id ? "on" : ""}" data-p="${p.id}" title="${esc(p.desc)}" style="--pacc:${acc}">${frame}<b>${esc(p.name)}</b><span>${esc(big ? p.desc : p.skill ? (SKILLS[p.skill] || {}).name || p.skill : "nada marcado")}</span></button>`;
 }
@@ -334,7 +336,7 @@ function presetCard(p, big = false) {
 function presetScene(p) {
   const s = withPick({ colours: p.picks.colours, fonts: p.picks.fonts });
   const hook = byId(HOOKS, p.picks.hook && p.picks.hook !== "none" ? p.picks.hook : "big-caps");
-  const caps = capById(p.picks.captions && p.picks.captions !== "none" ? p.picks.captions : "one-word-outline") || byId(CAPTIONS, "one-word-outline");
+  const caps = (isLds() && capById(L.captions)) || capById(p.picks.captions && p.picks.captions !== "none" ? p.picks.captions : "one-word-outline") || byId(CAPTIONS, "one-word-outline");
   const el = (p.picks.elements || []).map((id) => byId(ELEMENTS, id)).find(Boolean);
   return { s, hook, caps, el, html: hook.render(s) + caps.render(s) + (el ? el.render(s) : "") };
 }
@@ -418,10 +420,11 @@ function renderStep() {
   if (UI.step === 0) {
     const isTpl = (p) => /^(tpl|tf)-/.test(p.id);
     const kit = PRESETS.filter((p) => !isTpl(p)), tpl = PRESETS.filter(isTpl);
-    $("#quick").innerHTML = `<span class="lbl" style="width:100%">Começo rápido: um look pronto. Passe o mouse num card para ver a animação; clique para aplicar. Você muda qualquer peça depois.</span>
-      <div class="presets">${kit.map((p) => presetCard(p)).join("")}<button class="preset surprise" id="surprise" title="Um look coerente de uma skill, ao acaso"><div class="pframe dice">🎲</div><b>Surpreenda-me</b><span>look coerente, ao acaso</span></button></div>
-      <div class="divider" style="width:100%"><b>Templates <i class="serif">nossa versão</i></b><span>Formatos inteiros (layout + legendas + elementos), inspirados nos pacotes gringos. ${tpl.length} templates.</span></div>
-      <div class="presets tpl">${tpl.map((p) => presetCard(p, true)).join("")}</div>`;
+    UI.open = UI.open || {};
+    const sec = (key, title, sub, cards, cls) => `<div class="sec-head"><b>${title}</b><span>${sub}</span><button class="mini" data-open="${key}">${UI.open[key] ? "Ver menos ▴" : "Ver todos ▾"}</button></div><div class="presets ${cls} ${UI.open[key] ? "" : "row"}">${cards}</div>`;
+    $("#quick").innerHTML = sec("kit", `Começo rápido`, `Looks das skills do kit. Passe o mouse para ver a animação; clique para aplicar.`, kit.map((p) => presetCard(p)).join("") + `<button class="preset surprise" id="surprise" title="Um look coerente de uma skill, ao acaso"><div class="pframe dice">🎲</div><b>Surpreenda-me</b><span>look coerente, ao acaso</span></button>`, "")
+      + sec("tpl", `Templates <i class="serif">nossa versão</i>`, `${tpl.length} formatos inteiros inspirados nos pacotes gringos${isLds() ? " · com a sua Legenda Dinâmica" : ""}.`, tpl.map((p) => presetCard(p, true)).join(""), "tpl");
+    $$("#quick button[data-open]").forEach((b) => (b.onclick = () => { UI.open[b.dataset.open] = !UI.open[b.dataset.open]; renderStep(); }));
   } else $("#quick").innerHTML = "";
   if (UI.step === 0) setTimeout(fillPresetCards, 0);
   if (st.id === "captions") {
@@ -435,7 +438,9 @@ function renderStep() {
   if (st.id === "elements" || st.id === "motion") {
     UI.flt = UI.flt || { q: "", fam: "all" };
     const fams = [["all", "Todos"], ["oney", "Oney"], ["zee-effects", "Zee"], ["castilho-35", "35 efeitos"], ["lib", "style-library"], ["ajene-templates", "Templates"], ["tenfold", "Ten Fold"], ...(BN.available ? [["brand-nat", "Brand Nat"]] : [])];
-    $("#quick").innerHTML = `<span class="lbl">Mostrar:</span>` + fams.map(([k, t]) => `<button class="${UI.flt.fam === k ? "on" : ""}" data-fam="${k}">${t}</button>`).join("") + `<input id="fltSearch" placeholder="buscar… (ex.: celular, carimbo, zoom)" value="${esc(UI.flt.q)}" spellcheck="false">`;
+    const all = { elements: ELEMENTS, motion: MOTIONS }[st.id];
+    const cnt = (k) => all.filter((o) => k === "all" || (k === "oney" ? (o.skills || []).some((s) => /oney|vsl/.test(s)) : k === "lib" ? (o.skills || []).some((s) => /kallaway|vox/.test(s)) : (o.skills || []).includes(k))).length;
+    $("#quick").innerHTML = `<span class="lbl">Mostrar:</span>` + fams.map(([k, t]) => `<button class="${UI.flt.fam === k ? "on" : ""}" data-fam="${k}">${t} <small>${cnt(k)}</small></button>`).join("") + `<input id="fltSearch" placeholder="buscar… (ex.: celular, carimbo, zoom)" value="${esc(UI.flt.q)}" spellcheck="false">`;
     $$("#quick button[data-fam]").forEach((b) => (b.onclick = () => { UI.flt.fam = b.dataset.fam; renderStep(); }));
     const si = $("#fltSearch"); si.oninput = () => { clearTimeout(si._t); si._t = setTimeout(() => { UI.flt.q = si.value.trim(); const pos = si.selectionStart; renderStep(); const n = $("#fltSearch"); if (n) { n.focus(); n.setSelectionRange(pos, pos); } }, 220); };
   }
@@ -655,7 +660,8 @@ function renderReview(grid) {
 function applyPreset(id) {
   const p = byId(PRESETS, id); if (!p) return;
   L.preset = id; L.skill = p.skill;
-  L.colours = p.picks.colours || null; L.fonts = p.picks.fonts || null; L.hook = p.picks.hook || null; L.captions = p.picks.captions || null;
+  const keepLds = isLds() ? L.captions : null;
+  L.colours = p.picks.colours || null; L.fonts = p.picks.fonts || null; L.hook = p.picks.hook || null; L.captions = keepLds || p.picks.captions || null;
   L.elements = [...(p.picks.elements || [])]; L.motion = [...(p.picks.motion || [])];
   // picks that depend on an optional catalogue (Brand Nat codes) fall back to the nearest kit option
   if (L.captions && !capById(L.captions)) L.captions = "one-word-lower";
@@ -701,6 +707,7 @@ $("#clipSelect").onchange = (e) => openClip(e.target.value, e.target.selectedOpt
 $("#clipLoad").onclick = () => openClip($("#clipPath").value.trim(), null);
 $("#play").onclick = () => { if (video.paused) { video.play(); if (mainTl) mainTl.restart(); $("#play").textContent = "Pause"; } else { video.pause(); $("#play").textContent = "Play"; } };
 (function theme() { const root = document.documentElement; let t = null; try { t = localStorage.getItem(LS + "theme"); } catch {} if (t) root.dataset.theme = t; $("#theme").onclick = () => { const n = root.dataset.theme === "dark" ? "light" : "dark"; root.dataset.theme = n; try { localStorage.setItem(LS + "theme", n); } catch {} }; })();
+$("#previewToggle").onclick = () => { const p = $("#preview"); p.classList.toggle("collapsed"); $("#previewToggle").textContent = p.classList.contains("collapsed") ? "Prévia ▸" : "Prévia ▾"; setTimeout(() => { layoutStage(); scaleWorlds(); }, 50); };
 $("#reset").onclick = () => { if (confirm("Limpar todas as escolhas deste clipe?")) resetAll(); };
 $("#copyJson").onclick = async () => { try { await navigator.clipboard.writeText(JSON.stringify(lookJson(), null, 2)); toast("JSON copiado."); } catch { toast("Não deu para copiar."); } };
 // keyboard: ← → steps · 1–9 pick the Nth card · Esc closes "mais como essa" boxes

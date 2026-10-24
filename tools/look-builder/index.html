@@ -18,7 +18,8 @@
 </header>
 
 <main class="main">
-  <aside class="preview">
+  <aside class="preview" id="preview">
+    <button class="btn sm prev-toggle" id="previewToggle" title="Mostrar / esconder a prévia">Prévia ▾</button>
     <div class="clip-row">
       <select id="clipSelect"><option value="">Carregando clipes…</option></select>
       <input id="clipPath" placeholder="ou cole o caminho de um .mp4/.mov" spellcheck="false">
@@ -40,11 +41,14 @@
       <label class="chk"><input type="checkbox" id="mute" checked> mudo</label>
       <label class="chk"><input type="checkbox" id="showGuides" checked> guias</label>
     </div>
+    <details class="texts adjust" open>
+    <summary>Enquadramento e detecção</summary>
     <div class="sliders">
       <label>Topo da cabeça <input type="range" id="headTop" min="200" max="1200" step="10"><output id="headTopV"></output></label>
       <label>Legenda (topo) <input type="range" id="capTop" min="600" max="1700" step="10"><output id="capTopV"></output></label>
       <div class="detect-row"><button class="btn sm" id="detectHead" title="Acha o rosto em alguns frames do clipe e posiciona os sliders (MediaPipe, roda no navegador)">Detectar cabeça</button><label class="chk"><input type="checkbox" id="autoDetect" checked> automático ao abrir um clipe</label></div>
     </div>
+    </details>
     <details class="texts">
       <summary>Texto de exemplo</summary>
       <label>Gancho, linha 1 <input id="hook1"></label>
@@ -74,14 +78,13 @@
 </main>
 
 <footer class="bottom">
-  <div class="bottom-left"><button class="btn" id="prev">← Voltar</button><span class="lbl">Seu look</span><div class="tray-picks" id="trayPicks"></div><span class="extras" id="extras">0 extras</span></div>
+  <div class="bottom-nav"><button class="btn" id="prev" title="Voltar"><span class="ic">←</span><span class="tx">Voltar</span></button><div class="tray-picks" id="trayPicks"></div><span class="extras" id="extras">0 extras</span><button class="btn primary" id="next"><span class="tx">Próximo</span><span class="ic">→</span></button></div>
   <div class="save-row">
     <label class="slug-wrap"><span>video-projects/</span><input id="slug" placeholder="meu-reel" spellcheck="false"></label>
-    <button class="btn" id="copyPrompt" title="Copia o prompt pronto para o Claude">Copiar prompt</button>
-    <button class="btn" id="save" title="Grava look.json e LOOK.md no projeto">Salvar look.json</button>
-    <button class="btn test" id="testReal" title="Monta uma composição HyperFrames com este look e captura frames reais (≈1 min)">▶ Testar de verdade</button>
+    <button class="btn" id="copyPrompt" title="Copia o prompt pronto para o Claude"><span class="ic">⧉</span><span class="tx">Copiar prompt</span></button>
+    <button class="btn" id="save" title="Grava look.json e LOOK.md no projeto"><span class="ic">💾</span><span class="tx">Salvar look.json</span></button>
+    <button class="btn test" id="testReal" title="Monta uma composição HyperFrames com este look e captura frames reais (≈1 min)"><span class="ic">▶</span><span class="tx">Testar de verdade</span></button>
   </div>
-  <button class="btn primary" id="next">Próximo →</button>
 </footer>
 <div class="toast" id="toast"></div>
 
