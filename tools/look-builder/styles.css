@@ -56,6 +56,7 @@ i.serif{font-family:var(--serif);font-style:italic;font-weight:400;letter-spacin
 .tabs{display:flex;gap:4px;align-items:center}
 .tab{background:var(--bg3);border:1px solid var(--line);padding:7px 13px;border-radius:999px;color:var(--dim);font-weight:600;font-size:13px;transition:background var(--t),color var(--t),border-color var(--t);box-shadow:var(--shadow)}
 .tab:hover{color:var(--fg);border-color:var(--line3)}
+a.tab{text-decoration:none;display:inline-flex;align-items:center}
 .tab.on{color:var(--acc-ink);background:var(--acc);border-color:var(--acc)}
 .tab.danger:hover{color:var(--bad)}
 

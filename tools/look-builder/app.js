@@ -93,6 +93,7 @@ async function openClip(path, project) {
   video.src = `/api/clip?path=${encodeURIComponent(path)}`;
   video.load();
   loadProjectImages();
+  const rv = $("#toReview"); if (rv) rv.href = `/review?project=${encodeURIComponent(UI.clipProject || "")}&clip=${encodeURIComponent(path)}`;
 }
 // prints / photos in video-projects/<slug>/assets/{prints,photos,thumbs,img,images} feed the image-based elements (S.images)
 async function loadProjectImages() {

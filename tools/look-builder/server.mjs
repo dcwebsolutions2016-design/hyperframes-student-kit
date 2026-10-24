@@ -127,6 +127,53 @@ function listClips() {
   return out;
 }
 
+// Full word list for the Edit Review page: transcript.json / raw.json / whisper / silence-transcript / caption-groups.
+function readTranscript(slug) {
+  if (!slugOk(slug)) return null;
+  const a = join(root, "video-projects", slug, "assets");
+  for (const f of ["transcript.json", "transcript.raw.json", "raw.json", "transcript.whisper.json", "source.silence-transcript.json", "caption-groups.json"]) {
+    const p = join(a, f);
+    if (!existsSync(p)) continue;
+    try {
+      const t = JSON.parse(readFileSync(p, "utf8"));
+      let words = [];
+      if (f === "caption-groups.json" && Array.isArray(t)) words = t.flatMap((g) => (g.words || []).map((w) => ({ text: w.t, start: w.s, end: w.e, who: g.who })));
+      else words = (Array.isArray(t) ? t : t.words || []).map((w) => ({ text: w.text ?? w.word ?? w.t, start: w.start ?? w.s, end: w.end ?? w.e }));
+      words = words.filter((w) => w && w.text != null && Number.isFinite(+w.start)).map((w) => ({ ...w, text: String(w.text).trim(), start: +w.start, end: Number.isFinite(+w.end) ? +w.end : +w.start + 0.3 }));
+      if (words.length) return { file: f, words };
+    } catch {}
+  }
+  return null;
+}
+// Cut lists the pipeline already produced (cut-silences / cut-mistakes EDLs) for the Edits tab.
+function readEdls(slug) {
+  if (!slugOk(slug)) return [];
+  const a = join(root, "video-projects", slug, "assets");
+  if (!existsSync(a)) return [];
+  const out = [];
+  for (const f of readdirSync(a)) {
+    if (!/edl.*\.json$/i.test(f) && !/\.edl\.json$/i.test(f)) continue;
+    try {
+      const t = JSON.parse(readFileSync(a + "/" + f, "utf8"));
+      const ranges = t.delete_ranges || t.cuts || t.ranges || (Array.isArray(t) ? t : []);
+      for (const r of ranges) if (Number.isFinite(+r.start) && Number.isFinite(+r.end)) out.push({ file: f, agent: t.agent || null, start: +r.start, end: +r.end, reason: (r.reasons || [r.reason]).filter(Boolean).join("; ") });
+    } catch {}
+  }
+  return out.sort((x, y) => x.start - y.start);
+}
+function reviewMarkdown(slug, rv) {
+  const ts = (t) => { t = Math.max(0, +t || 0); const m = Math.floor(t / 60), sec = (t % 60).toFixed(1).padStart(4, "0"); return `${m}:${sec}`; };
+  const L = [`# Edit Review: ${slug}`, "", `Gerado pelo Look builder (tools/look-builder/review.html) em ${new Date().toISOString().slice(0, 16).replace("T", " ")}.`, ""];
+  if (rv.clip) L.push(`Clipe: \`${rv.clip}\``, "");
+  L.push("## Notas por tempo", "");
+  for (const n of (rv.notes || []).slice().sort((x, y) => x.t - y.t)) L.push(`- [${ts(n.t)}] ${n.done ? "✅ " : ""}${n.text}`);
+  if (!(rv.notes || []).length) L.push("- (nenhuma)");
+  L.push("", "## Edits", "", "| # | tipo | in | out | descrição | status |", "|---|---|---|---|---|---|");
+  (rv.edits || []).slice().sort((x, y) => x.in - y.in).forEach((e, i) => L.push(`| ${i + 1} | ${e.type || "edit"} | ${ts(e.in)} | ${e.out != null ? ts(e.out) : ""} | ${e.text || ""} | ${e.done ? "feito" : "a fazer"} |`));
+  L.push("");
+  return L.join("\n");
+}
+
 function sampleWords(slug) {
   if (!slugOk(slug)) return null;
   const a = join(root, "video-projects", slug, "assets");
@@ -215,6 +262,25 @@ const server = createServer(async (req, res) => {
       return streamFile(req, res, abs, { "cache-control": "no-store" });
     }
     if (p === "/api/transcript") return json(res, 200, { sample: sampleWords(url.searchParams.get("project")) });
+    // Edit Review page: notes per timestamp + edits list, saved in video-projects/<slug>/review.json (+ REVIEW.md)
+    if (p === "/api/review" && req.method === "GET") {
+      const slug = url.searchParams.get("project");
+      if (!slugOk(slug)) return json(res, 200, { review: null, transcript: null, edl: [], clips: [] });
+      const f = join(root, "video-projects", slug, "review.json");
+      let review = null; try { if (existsSync(f)) review = JSON.parse(readFileSync(f, "utf8")); } catch {}
+      return json(res, 200, { review, transcript: readTranscript(slug), edl: readEdls(slug), clips: listClips().filter((c) => c.project === slug) });
+    }
+    if (p === "/api/review" && req.method === "POST") {
+      const body = JSON.parse(await readBody(req) || "{}");
+      const slug = body.project;
+      if (!slugOk(slug)) return json(res, 400, { error: "Slug inválido: use letras minúsculas, números e hífens." });
+      const rv = { clip: body.clip || null, notes: Array.isArray(body.notes) ? body.notes : [], edits: Array.isArray(body.edits) ? body.edits : [], updatedAt: new Date().toISOString() };
+      const dir = join(root, "video-projects", slug);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, "review.json"), JSON.stringify(rv, null, 2));
+      writeFileSync(join(dir, "REVIEW.md"), reviewMarkdown(slug, rv));
+      return json(res, 200, { ok: true, files: [`video-projects/${slug}/review.json`, `video-projects/${slug}/REVIEW.md`] });
+    }
     if (p === "/api/look" && req.method === "GET") {
       const slug = url.searchParams.get("project");
       if (!slugOk(slug)) return json(res, 400, { error: "bad slug" });
@@ -320,7 +386,7 @@ const server = createServer(async (req, res) => {
       return notFound(res, "font");
     }
     // Static app files.
-    const file = p === "/" ? join(here, "index.html") : join(here, p);
+    const file = p === "/" ? join(here, "index.html") : p === "/review" ? join(here, "review.html") : join(here, p);
     if (!isUnder(file, here) && file !== join(here, "index.html")) return notFound(res);
     if (!existsSync(file) || !statSync(file).isFile()) return notFound(res);
     return streamFile(req, res, file, { "cache-control": "no-store" });

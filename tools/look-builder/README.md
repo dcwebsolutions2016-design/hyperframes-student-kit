@@ -150,6 +150,12 @@ USER_FONTS="C:\caminho\da\pasta" node tools/look-builder/server.mjs
   volta da pessoa no preview; a edição real usa matte. Presets `tpl-*`, paleta "Laranja Ajene", legendas `aj-word`,
   `aj-phrase`, `aj-stacked`, `ear-to-ear`. O "Testar de verdade" de uma cena renderiza 15 s (5 frames) e os helpers das
   animações vão junto na página (`AJ_RUNTIME`).
+- **Edit Review** (`/review?project=<slug>`, botão "Edit Review" no topo do painel): assista o corte do projeto, deixe
+  notas por tempo (N), uma lista de edits com tipo, in/out e status (E ou Shift+Enter; "Importar cortes da EDL" traz
+  os cortes do cut-silences / cut-mistakes já marcados como feitos), e a transcrição clicável que segue o player.
+  Marcadores na timeline: notas (laranja), edits (verde), cortes da EDL (vermelho). Salvar (Ctrl+S) grava
+  `video-projects/<slug>/review.json` e `REVIEW.md`; rascunho em localStorage até salvar. Arquivos: `review.html`,
+  `review.css`, `review.js`; rotas `/api/review` GET/POST.
 - `looks.tenfold.mjs`: os três looks do /video-edit da Ten Fold (Bold, Cool girl, Cool dude) como presets `tf-*`.
 - Skill `/look-builder` (`.claude/skills/look-builder/`): chama a edição a partir do `look.json` ou de um template id,
   como os pacotes gringos fazem com "/". Ela roteia para a skill do kit que o look aponta.
