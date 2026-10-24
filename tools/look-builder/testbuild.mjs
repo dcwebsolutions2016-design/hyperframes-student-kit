@@ -10,7 +10,7 @@ import { spawn, execFileSync } from "node:child_process";
 import { COLOURS, FONTS, HOOKS, CAPTIONS, ELEMENTS, MOTIONS, ldsCaption } from "./looks.mjs";
 import "./looks.zee.mjs";
 import "./looks.castilho.mjs";
-import "./looks.ajene.mjs";
+import { AJ_RUNTIME } from "./looks.ajene.mjs";
 import "./looks.tenfold.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -67,9 +67,11 @@ export function planFromLook(look, dur) {
   const els = (look.elements || []).map((e) => byId(ELEMENTS, e.id)).filter(Boolean);
   const motions = (look.motion || []).map((m) => byId(MOTIONS, m.id)).filter(Boolean);
   const objM = motions.filter((m) => !m.camera), camM = motions.filter((m) => m.camera);
-  let t = 2.9; const elBeats = els.map((e, i) => { const b = { el: e, t0: +t.toFixed(2), motion: objM[i % Math.max(1, objM.length)] || byId(MOTIONS, "blur-rise") }; t += e.anim ? 3.2 : 1.5; return b; });
-  const capDt = caps ? (caps.mode === "lds" ? 1.3 : caps.mode === "phrase" ? 1.2 : 0.34) : 0;
-  return { hook, caps, capDt, elBeats, camM, dur };
+  // a template scene (looks.ajene.mjs, scene: true) owns the whole clip from 0; other elements queue from 2.9 s as on the stage
+  let t = 2.9; const elBeats = els.map((e, i) => { if (e.scene) return { el: e, t0: 0, show: Math.min(e.dur || 15, dur), scene: true, motion: null }; const b = { el: e, t0: +t.toFixed(2), show: e.anim ? 3.3 : 2.9, motion: objM[i % Math.max(1, objM.length)] || byId(MOTIONS, "blur-rise") }; t += e.anim ? 3.2 : 1.5; return b; });
+  const sceneDur = Math.max(0, ...elBeats.map((b) => (b.scene ? b.show : 0)));
+  const capDt = caps ? (sceneDur ? "spread" : caps.mode === "lds" ? 1.3 : caps.mode === "phrase" ? 1.2 : 0.34) : 0;
+  return { hook, caps, capDt, elBeats, camM, dur, sceneDur };
 }
 
 export function compositionHtml(look, S, plan, clipRel, clipDur, extraCss = "") {
@@ -78,22 +80,22 @@ export function compositionHtml(look, S, plan, clipRel, clipDur, extraCss = "") 
   const wrap = (inner, start, d, track, extra = "") => inner ? `<div class="clip" data-start="${start}" data-duration="${d.toFixed(2)}" data-track-index="${track}" style="position:absolute;inset:0;pointer-events:none;${extra}">${inner}</div>` : "";
   let track = 1, body = "";
   body += wrap(plan.hook && plan.hook.id !== "none" ? plan.hook.render(S) : "", 0, Math.min(D, 3.5), track++);
-  body += wrap(plan.caps ? plan.caps.render(S) : "", 0, D, track++);
-  for (const b of plan.elBeats) body += wrap(b.el.render(S), b.t0 > 0 ? b.t0.toFixed(2) : 0, Math.max(0.5, Math.min(b.el.anim ? 3.3 : 2.9, D - b.t0)), track++, `--t0:${b.t0}`);
+  body += wrap(plan.caps ? plan.caps.render(S) : "", 0, D, track++, "z-index:5");
+  for (const b of plan.elBeats) body += wrap(b.el.render(S), b.t0 > 0 ? b.t0.toFixed(2) : 0, Math.max(0.5, Math.min(b.show, D - b.t0)), track++, `--t0:${b.t0}`);
   // animation code: closures from looks.mjs serialised verbatim; `cycle` mirrors app.js cycleWords/playCaptions
   const anims = [];
   if (plan.hook && plan.hook.id !== "none") anims.push(`{ const h = document.querySelector("#${id} .hook"); if (h) { (${plan.hook.anim.toString()})(tl, h); tl.to(h, { opacity: 0, duration: 0.25 }, 3.2); } }`);
-  if (plan.caps) anims.push(`{ const c = document.querySelector("#${id} .caps"); if (c) { const ws = [...c.querySelectorAll(".w")]; const dt = ${plan.capDt}, start = 0.3;
+  if (plan.caps) anims.push(`{ const c = document.querySelector("#${id} .caps"); if (c) { const ws = [...c.querySelectorAll(".w")]; const start = 0.3, dt = ${plan.capDt === "spread" ? `Math.max(0.34, (${plan.sceneDur} - start - 0.4) / (ws.length || 1))` : plan.capDt};
     ws.forEach((w, i) => { tl.set(w, { opacity: 1 }, start + i * dt); tl.set(w, { opacity: 0 }, start + (i + 1) * dt); });
-    ${plan.caps.mode === "phrase" ? `ws.forEach((x, i) => tl.from(x, { y: 16, opacity: 0, duration: 0.3 }, start + i * dt));` : ""}
+    ${plan.caps.mode === "phrase" ? `ws.forEach((x, i) => tl.fromTo(x, { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3 }, start + i * dt));` : ""}
     ${plan.caps.mode === "lds" ? `ws.forEach((x, i) => tl.from([...x.querySelectorAll(".ldw")], { y: 14, opacity: 0, scale: 0.92, duration: 0.22, stagger: 0.18, ease: "back.out(1.6)" }, start + i * dt));` : ""} } }`);
-  plan.elBeats.forEach((b, i) => anims.push(`{ const e = document.querySelectorAll("#${id} .el")[${i}]; if (e) { const t0 = ${b.t0};
+  plan.elBeats.forEach((b, i) => { if (b.scene) { anims.push(`{ const e = document.querySelectorAll("#${id} .el")[${i}]; if (e) { const sub = gsap.timeline(); (${b.el.anim.toString()})(sub, e, cam); tl.add(sub, 0); } }`); return; } anims.push(`{ const e = document.querySelectorAll("#${id} .el")[${i}]; if (e) { const t0 = ${b.t0};
     const sub = gsap.timeline(); (${(b.el.anim || b.motion.anim).toString()})(sub, e, cam); tl.add(sub, t0);
     if (e.querySelector(".num,.bar")) { const t = gsap.timeline(); (${byId(MOTIONS, "count-tick").anim.toString()})(t, e); tl.add(t, t0 + 0.2); }
     e.querySelectorAll("path").forEach((p) => { const L = p.getTotalLength(); p.style.strokeDasharray = L; tl.fromTo(p, { strokeDashoffset: L }, { strokeDashoffset: 0, duration: 0.45 }, t0 + 0.2); });
     const li = e.querySelectorAll(".li,.row,.ch"); if (li.length) tl.from(li, { opacity: 0, y: 10, duration: 0.3, stagger: 0.18 }, t0 + 0.1);
     const strip = e.querySelector(".strip"); if (strip) tl.to(strip, { x: -900, duration: 4, ease: "none" }, t0);
-    tl.to(e, { opacity: 0, duration: 0.25 }, t0 + ${b.el.anim ? 3.0 : 2.6}); } }`));
+    tl.to(e, { opacity: 0, duration: 0.25 }, t0 + ${b.el.anim ? 3.0 : 2.6}); } }`); });
   plan.camM.forEach((m, i) => anims.push(`{ const t = gsap.timeline(); (${m.anim.toString()})(t, null, cam); tl.add(t, ${3 + i * 3}); }`));
   const google = `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Fraunces:ital,wght@0,300;0,900;1,900&family=Archivo:wght@400;500;700&family=Playfair+Display:wght@700&family=Space+Mono&display=block">`;
   return `<!doctype html>
@@ -117,6 +119,7 @@ ${extraCss}
 // Generated by tools/look-builder/testbuild.mjs — one paused timeline, registered synchronously.
 const tl = gsap.timeline({ paused: true });
 const cam = document.getElementById("cam");
+${plan.elBeats.some((b) => b.scene) ? AJ_RUNTIME : ""}
 ${anims.join("\n")}
 tl.to({}, { duration: 0.01 }, ${D});
 window.__timelines = window.__timelines || {}; window.__timelines["${id}"] = tl;
@@ -149,7 +152,7 @@ export function buildTestProject(look, { projectDir, clip, from = 0, dur = 8 }) 
   writeFileSync(join(dir, "index.html"), html);
   writeFileSync(join(dir, "hyperframes.json"), JSON.stringify({ $schema: "https://hyperframes.heygen.com/schema/hyperframes.json", paths: { blocks: "compositions", components: "compositions/components", assets: "assets" } }, null, 2) + "\n");
   // Frames worth looking at: hook, first captions, each element entrance (+0.5 s), a late frame.
-  const times = [0.9, 1.9, ...plan.elBeats.map((b) => +(b.t0 + 0.6).toFixed(2))];
+  const times = plan.sceneDur ? [1.5, 4.5, 8.5, 12.5, 14.5] : [0.9, 1.9, ...plan.elBeats.map((b) => +(b.t0 + 0.6).toFixed(2))];
   if (!plan.elBeats.length) times.push(4.5, 6.5);
   return { dir, times: [...new Set(times.filter((t) => t < dur))].sort((a, b) => a - b), start };
 }

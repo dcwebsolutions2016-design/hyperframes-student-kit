@@ -353,3 +353,6 @@ i.serif{font-family:var(--serif);font-style:italic;font-weight:400;letter-spacin
 .stage .empty b{color:#fff;font:800 12px var(--head)}
 .stage .empty span{font-size:11px;max-width:none;color:#ddd}
 .stage.has-clip .empty{display:none}
+
+/* captions sit above template scenes (full-frame backdrops, panels) */
+.world > .caps { z-index: 5; }

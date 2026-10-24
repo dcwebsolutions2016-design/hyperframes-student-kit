@@ -56,7 +56,7 @@ const video = $("#video"), stage = $("#stage"), world = $("#world"), cam = $("#c
 // ------------------------------------------------------------------ derived style state for renderers
 function S() {
   const c = byId(COLOURS, L.colours) || COLOURS[0];
-  return { v: c.vars, font: fontWithUser(byId(FONTS, L.fonts) || FONTS[0]), text: UI.text, W: UI.W, H: UI.H, landscape: UI.landscape, headTop: UI.headTop, capTop: UI.capTop };
+  return { v: c.vars, font: fontWithUser(byId(FONTS, L.fonts) || FONTS[0]), text: UI.text, W: UI.W, H: UI.H, landscape: UI.landscape, headTop: UI.headTop, capTop: UI.capTop, images: UI.images || [] };
 }
 function withPick(over) { const s = S(); if (over.colours) s.v = byId(COLOURS, over.colours).vars; if (over.fonts) s.font = fontWithUser(byId(FONTS, over.fonts)); return s; }
 // Fonts from the user's own folder override roles of the chosen pair (display / body / serif / hand / mono).
@@ -92,6 +92,14 @@ async function openClip(path, project) {
   if (!UI.slugTouched) $("#slug").value = UI.clipProject || slugify(path.split(/[\\/]/).pop().replace(/\.[^.]+$/, ""));
   video.src = `/api/clip?path=${encodeURIComponent(path)}`;
   video.load();
+  loadProjectImages();
+}
+// prints / photos in video-projects/<slug>/assets/{prints,photos,thumbs,img,images} feed the image-based elements (S.images)
+async function loadProjectImages() {
+  UI.images = [];
+  if (!UI.clipProject) return;
+  try { const r = await fetch(`/api/images?project=${encodeURIComponent(UI.clipProject)}`).then((x) => x.json()); UI.images = (r.images || []).map((im) => im.url).slice(0, 24); } catch {}
+  if (UI.images.length) { renderStep(); rebuildMain(); toast(`${UI.images.length} imagens do projeto nas vitrines (carrossel, mosaico, thumbs).`); }
 }
 // ---- persistence: localStorage per clip (autosave) + look.json already saved in the project
 const LS = "look-builder:v1:";
@@ -329,9 +337,9 @@ async function loadPresetImages() {
   if (Object.keys(PRESET_IMG).length && UI.step === 0) renderStep();
 }
 // landing-page mockup kind per preset (templates and kit looks alike)
-const MOCK_KIND = { "tpl-business-reels": "negocios", "tpl-personal-reels": "pessoal", "tpl-explainer-panel": "painel", "tpl-glass-explainer": "vidro", "tpl-visual-essay": "ensaio", "tpl-split-reel": "split", "tpl-broll-stacked": "broll", "tpl-fitted-captions": "encaixe", "tpl-image-cluster": "cluster", "tpl-cutout-backdrop": "recorte", "tpl-cutout-grid": "grade", "tpl-depth-ui": "profundo", "tpl-ranking-format": "ranking", "tpl-tiktok-style": "negocios", "tpl-yap-and-show": "cluster", "tpl-clone-versus": "grade", "tpl-cinematic-type": "ensaio", "tpl-top5": "ranking", "tpl-if-then": "painel", "tpl-this-vs-that": "vidro", "tpl-rapid-list": "clipes", "tpl-natural-story": "recorte", "tpl-ear-to-ear": "youtube", "tpl-tips-breakdown": "chamada",
+const MOCK_KIND = { "tpl-business-reels": "negocios", "tpl-personal-reels": "pessoal", "tpl-explainer-panel": "painel", "tpl-glass-explainer": "vidro", "tpl-visual-essay": "ensaio", "tpl-split-reel": "split", "tpl-broll-stacked": "broll", "tpl-fitted-captions": "encaixe", "tpl-image-cluster": "cluster", "tpl-cutout-backdrop": "recorte", "tpl-cutout-grid": "grade", "tpl-depth-ui": "profundo", "tpl-ranking-format": "ranking", "tpl-tiktok-style": "negocios", "tpl-yap-and-show": "cluster", "tpl-clone-versus": "grade", "tpl-cinematic-type": "ensaio", "tpl-top5": "ranking", "tpl-if-then": "painel", "tpl-this-vs-that": "vidro", "tpl-rapid-list": "clipes", "tpl-natural-story": "recorte", "tpl-ear-to-ear": "youtube", "tpl-tips-breakdown": "chamada", "tpl-youtube-clips": "clipes", "tpl-dual-role": "grade", "tpl-vlog": "broll", "tpl-educational-youtube": "youtube", "tpl-split-screen-document": "chamada", "tpl-coaching-call-clips": "clipes", "tpl-lesson-doc": "chamada",
   "tf-bold": "encaixe", "tf-cool-girl": "cluster", "tf-cool-dude": "ensaio", celular: "pessoal", editorial: "cluster", anuncio: "painel", colagem: "recorte", explicativo: "split", "vsl-roxo": "vidro", "vsl-clean": "encaixe", aurora: "vidro", vox: "ensaio", zee: "profundo", castilho: "negocios" };
-const WIDE = new Set(["tpl-ear-to-ear", "tpl-tips-breakdown"]);
+const WIDE = new Set(["tpl-ear-to-ear", "tpl-tips-breakdown", "tpl-educational-youtube", "tpl-split-screen-document", "tpl-coaching-call-clips", "tpl-lesson-doc"]);
 function presetCard(p, big = false) {
   const ratio = (UI.H / UI.W) * 100;
   const img = PRESET_IMG[p.id];
@@ -355,16 +363,25 @@ function fillPresetCards() {
     const p = byId(PRESETS, el.dataset.p); const w = $(".world", el), f = $(".pframe", el), camEl = $(".cam", el);
     if (!p || !p.skill || !w || !f) return;
     const scene = presetScene(p);
-    const paint = () => { w.innerHTML = scene.html; const first = $(".w", w); if (first) first.style.opacity = 1; const e = $(".el", w); if (e && scene.el && scene.el.camera) e.style.opacity = 0.9; };
+    const isScene = scene.el && scene.el.scene;
+    let posterTl = null;
+    // static frame: a 15 s scene is shown frozen a few seconds in (its layers all start hidden)
+    const paint = () => {
+      if (posterTl) { posterTl.kill(); posterTl = null; }
+      w.innerHTML = scene.html; const first = $(".w", w); if (first) first.style.opacity = 1; const e = $(".el", w);
+      if (e && isScene) { posterTl = gsap.timeline({ paused: true }); scene.el.anim(posterTl, e, camEl); posterTl.seek(scene.el.poster || 4.5); }
+      else if (e && scene.el && scene.el.camera) e.style.opacity = 0.9;
+    };
     paint();
     w.style.transform = `scale(${f.clientWidth / UI.W})`;
     el.onmouseenter = () => {
       if (presetTls.get(el)) return;
+      if (posterTl) { posterTl.kill(); posterTl = null; } if (camEl) gsap.set(camEl, { clearProps: "all" });
       w.innerHTML = scene.html;
       const tl = gsap.timeline({ repeat: -1, repeatDelay: 0.6 });
       const h = $(".hook", w); if (h) scene.hook.anim(tl, h);
-      playCaptions(tl, w, scene.caps, 0.3);
-      const e = $(".el", w); if (e) { const m = byId(MOTIONS, (p.picks.motion || [])[0]) || byId(MOTIONS, "blur-rise"); const sub = gsap.timeline(); if (scene.el.anim) scene.el.anim(sub, e, camEl); else if (!m.camera) m.anim(sub, e, camEl); else byId(MOTIONS, "blur-rise").anim(sub, e); tl.add(sub, 1.0); }
+      playCaptions(tl, w, scene.caps, 0.3, isScene ? scene.el.dur || 15 : 0);
+      const e = $(".el", w); if (e) { const m = byId(MOTIONS, (p.picks.motion || [])[0]) || byId(MOTIONS, "blur-rise"); const sub = gsap.timeline(); if (scene.el.anim) scene.el.anim(sub, e, camEl); else if (!m.camera) m.anim(sub, e, camEl); else byId(MOTIONS, "blur-rise").anim(sub, e); tl.add(sub, isScene ? 0 : 1.0); }
       tl.to({}, { duration: 1.2 });
       presetTls.set(el, tl); el.classList.add("playing");
     };
@@ -491,13 +508,15 @@ function renderStep() {
 }
 
 // one-word captions cycle; LDS screens also reveal word by word
-function playCaptions(tl, root, caps, start) {
+function playCaptions(tl, root, caps, start, span = 0) {
   if (!caps) return;
   const c = $(".caps", root); if (!c) return;
-  const dt = caps.mode === "phrase" ? 1.2 : caps.mode === "lds" ? 1.3 : 0.34;
+  // span > 0 (a 15 s template scene): spread the words over the whole scene instead of the quick cycle
+  const n = $$(".w", c).length || 1;
+  const dt = span ? Math.max(0.34, (span - start - 0.4) / n) : caps.mode === "phrase" ? 1.2 : caps.mode === "lds" ? 1.3 : 0.34;
   cycleWords(tl, c, start, dt);
   if (caps.capAnim) caps.capAnim(tl, c, start, dt);
-  else if (caps.mode === "phrase") $$(".w", c).forEach((x, i) => tl.from(x, { y: 16, opacity: 0, duration: 0.3 }, start + i * dt));
+  else if (caps.mode === "phrase") $$(".w", c).forEach((x, i) => tl.fromTo(x, { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3 }, start + i * dt));
   if (caps.mode === "lds") $$(".w", c).forEach((x, i) => tl.from($$(".ldw", x), { y: 14, opacity: 0, scale: 0.92, duration: 0.22, stagger: 0.18, ease: "back.out(1.6)" }, start + i * dt));
 }
 function fillCard(step, o, el) {
@@ -520,6 +539,7 @@ function fillCard(step, o, el) {
   if (step === "elements") {
     w.innerHTML = o.render(S());
     const e = $(".el", w); if (!e) return;
+    if (o.scene) { o.anim(tl, e, camEl); tl.to({}, { duration: 0.6 }); tl.seek(o.poster || 4.5); return; }
     if (o.anim) { o.anim(tl, e, camEl); tl.to({}, { duration: 1.2 }); return; }
     const m = entrance(L.motion[0]);
     if (m.camera) byId(MOTIONS, "blur-rise").anim(tl, e); else m.anim(tl, e, camEl);
@@ -560,12 +580,16 @@ function rebuildMain() {
   mainTl = gsap.timeline({ repeat: -1, repeatDelay: 0.8 });
   const h = $(".hook", world);
   if (h && hook) { hook.anim(mainTl, h); mainTl.to(h, { opacity: 0, duration: 0.25 }, 3.2); }
-  playCaptions(mainTl, world, caps, 0.3);
+  // a template scene (looks.ajene.mjs) owns the whole 15 s: it starts at 0 and the captions spread across it
+  const sceneDur = Math.max(0, ...els.map((d) => (d.scene ? d.dur || 15 : 0)));
+  playCaptions(mainTl, world, caps, 0.3, sceneDur);
   const motions = L.motion.map((m) => byId(MOTIONS, m)).filter(Boolean);
   const camM = motions.filter((m) => m.camera), objM = motions.filter((m) => !m.camera);
+  let tNext = 2.9;
   $$(".el", world).forEach((e, i) => {
     const def = els[i];
-    const t0 = 2.9 + i * (def && def.anim ? 3.2 : 1.5);
+    if (def && def.scene) { const sub = gsap.timeline(); def.anim(sub, e, cam); mainTl.add(sub, 0); return; }
+    const t0 = tNext; tNext += def && def.anim ? 3.2 : 1.5;
     gsap.set(e, { opacity: 0 }); mainTl.set(e, { opacity: 1 }, t0);
     if (def && def.anim) { const sub = gsap.timeline(); def.anim(sub, e, cam); mainTl.add(sub, t0); mainTl.to(e, { opacity: 0, duration: 0.25 }, t0 + 3.0); return; }
     const m = objM[i % Math.max(1, objM.length)] || byId(MOTIONS, "blur-rise");
@@ -577,7 +601,7 @@ function rebuildMain() {
     mainTl.to(e, { opacity: 0, duration: 0.25 }, t0 + 2.6);
   });
   camM.forEach((m, i) => { const t = gsap.timeline(); m.anim(t, null, cam); mainTl.add(t, 3 + i * 3); });
-  const total = Math.max(5, 3.2 + els.reduce((a, d) => a + (d.anim ? 3.2 : 1.5), 0) + 1.5, caps ? 0.3 + $$(".w", world).length * (caps.mode === "lds" ? 1.3 : caps.mode === "phrase" ? 1.2 : 0.34) + 0.5 : 0);
+  const total = Math.max(5, sceneDur, 3.2 + els.reduce((a, d) => a + (d.scene ? 0 : d.anim ? 3.2 : 1.5), 0) + 1.5, caps && !sceneDur ? 0.3 + $$(".w", world).length * (caps.mode === "lds" ? 1.3 : caps.mode === "phrase" ? 1.2 : 0.34) + 0.5 : 0);
   mainTl.to({}, { duration: 0.1 }, total);
   $("#jsonPre").textContent = JSON.stringify(lookJson(), null, 2);
   autosave();
@@ -700,7 +724,7 @@ async function testReal() {
   body.innerHTML = `<p class="test-wait">Montando o projeto de teste e capturando frames com o HyperFrames… no seu PC pode levar um minuto.</p>`;
   $("#testPath").textContent = ""; btn.classList.add("busy"); if (!dlg.open) dlg.showModal();
   try {
-    const r = await fetch("/api/test", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ project: slug, look: lookJson(), from: video.currentTime || 0, dur: 8 }) }).then((x) => x.json());
+    const r = await fetch("/api/test", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ project: slug, look: lookJson(), from: video.currentTime || 0, dur: L.elements.some((id) => (byId(ELEMENTS, id) || {}).scene) ? 15 : 8 }) }).then((x) => x.json());
     if (r.error) { body.innerHTML = `<div class="test-err">${esc(r.error)}</div>`; return; }
     const label = (f) => { const m = /at-(\d+(?:\.\d+)?)s/.exec(f); return m ? `${Number(m[1]).toFixed(1)} s` : f; };
     body.innerHTML = `<div class="shots ${UI.landscape ? "wide" : ""}">${r.images.map((im, i) => `<figure class="shot"><a href="${im.url}" target="_blank" rel="noopener"><img src="${im.url}" alt="${esc(im.file)}" loading="lazy"></a><figcaption><span>${label(im.file)}</span><span>${esc(im.file)}</span></figcaption></figure>`).join("")}</div>`;

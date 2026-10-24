@@ -245,7 +245,7 @@ const server = createServer(async (req, res) => {
       mkdirSync(projectDir, { recursive: true });
       const t0 = Date.now();
       let built;
-      try { built = buildTestProject({ ...body.look, project: slug }, { projectDir, clip, from: Number(body.from) || 0, dur: Math.min(12, Math.max(5, Number(body.dur) || 8)) }); }
+      try { built = buildTestProject({ ...body.look, project: slug }, { projectDir, clip, from: Number(body.from) || 0, dur: Math.min(15, Math.max(5, Number(body.dur) || 8)) }); }
       catch (e) { return json(res, 500, { error: "Falha ao montar o projeto de teste: " + (e.message || e) }); }
       try {
         const r = await runSnapshot(built.dir, built.times);
@@ -278,6 +278,26 @@ const server = createServer(async (req, res) => {
       return createReadStream(f.file).pipe(res);
     }
     if (p === "/api/userfont-file") { const f = fontIndex()[Number(url.searchParams.get("id"))]; return f ? json(res, 200, { file: f.file, name: f.name }) : notFound(res, "font"); }
+    // images of a project (prints, photos, thumbs, img) for elements that show the student's own pictures
+    if (p === "/api/images") {
+      const slug = url.searchParams.get("project");
+      if (!slugOk(slug)) return json(res, 200, { images: [] });
+      const base = join(root, "video-projects", slug, "assets");
+      const out = [];
+      for (const d of ["prints", "photos", "thumbs", "img", "images", ""]) {
+        const dir = join(base, d);
+        if (!existsSync(dir) || !statSync(dir).isDirectory()) continue;
+        for (const f of readdirSync(dir)) if (/\.(png|jpe?g|webp)$/i.test(f)) out.push({ name: f, folder: d, url: `/api/img?project=${encodeURIComponent(slug)}&f=${encodeURIComponent((d ? d + "/" : "") + f)}` });
+        if (out.length > 40) break;
+      }
+      return json(res, 200, { images: out.slice(0, 40) });
+    }
+    if (p === "/api/img") {
+      const slug = url.searchParams.get("project"), f = url.searchParams.get("f") || "";
+      if (!slugOk(slug) || !/^[\w .()\-]+(\/[\w .()\-]+)?\.(png|jpe?g|webp)$/i.test(f)) return notFound(res);
+      const file = join(root, "video-projects", slug, "assets", f);
+      return existsSync(file) ? streamFile(req, res, file, { "cache-control": "no-store" }) : notFound(res);
+    }
     if (p === "/api/preset-images") {
       const d = join(here, "assets", "presets");
       const files = existsSync(d) ? readdirSync(d).filter((f) => /\.(png|jpe?g|webp)$/i.test(f)) : [];

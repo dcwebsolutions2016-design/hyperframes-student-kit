@@ -140,10 +140,16 @@ USER_FONTS="C:\caminho\da\pasta" node tools/look-builder/server.mjs
   Os 105 códigos (H, C, L, P, V, B, X, M, S, G) viram opções: ganchos e legendas com preview próprio, os demais
   mapeados para um renderizador do kit ou mostrados como card de posicionamento. S e G se escolhem na Revisão.
   O `look.json` grava `brandNat.codes` e o prompt traz a linha `Edit <vídeo> with H10 C9 …` para a skill deles.
-- `looks.ajene.mjs`: **nossas versões** dos 20 templates (+13 anunciados) de editing.ajenepinnock.com, só a partir da
-  descrição pública e do reel do autor: painel explicativo, painel de vidro, split, tier list, grid de recortes, cluster
-  de imagens, captions encaixadas, se/então, isso vs aquilo, lista rápida, top 5, clone vs clone, canvas pontilhado com
-  leque de celulares, Depth UI com toast "Inscrito", etiqueta de preço. Presets `tpl-*`, paleta "Laranja Ajene".
+- `looks.ajene.mjs`: os 31 templates de editing.ajenepinnock.com refeitos **frame a frame** a partir das amostras
+  públicas (15 s cada, mesmo roteiro). Cada template é uma **cena** (`scene: true`, `dur: 15`): camadas de UI ligadas e
+  desligadas numa timeline GSAP, legenda palavra a palavra no peito com a palavra-chave em serif itálico laranja e, onde
+  a amostra faz isso, a câmera entra no painel escuro embaixo (recorte no rosto, legenda vai junto). Componentes
+  compartilhados: caixas brancas de gancho, notificações, pílulas Hook/Story/Offer, grade de 30 dias, contadores,
+  gráfico que se desenha, Google Doc, faixa de capas, tier list, quadros Top 5 / Se-Então / Isso-vs-Aquilo, documento
+  rolando (16:9), formas de onda. Fundos em tela cheia (recortes, vlog, cinema, história natural) abrem um buraco suave em
+  volta da pessoa no preview; a edição real usa matte. Presets `tpl-*`, paleta "Laranja Ajene", legendas `aj-word`,
+  `aj-phrase`, `aj-stacked`, `ear-to-ear`. O "Testar de verdade" de uma cena renderiza 15 s (5 frames) e os helpers das
+  animações vão junto na página (`AJ_RUNTIME`).
 - `looks.tenfold.mjs`: os três looks do /video-edit da Ten Fold (Bold, Cool girl, Cool dude) como presets `tf-*`.
 - Skill `/look-builder` (`.claude/skills/look-builder/`): chama a edição a partir do `look.json` ou de um template id,
   como os pacotes gringos fazem com "/". Ela roteia para a skill do kit que o look aponta.

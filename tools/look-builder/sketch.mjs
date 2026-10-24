@@ -49,6 +49,7 @@ const EL = {
   "diagram-plane": (acc) => R(0, 0, 90, 110, "#FBFBFA", 0) + T(45, 40, "A", 12, "#1c2733") + P("M45 46 V60 M40 55 L45 61 L50 55", "#1c2733", 1) + T(45, 76, "B", 12, acc),
   "shrink-frame": (acc) => R(0, 0, 90, 160, acc, 0) + R(10, 44, 42, 76, "#5a5a66", 1) + FIG(31, 78, 0.55, "#A8A29A", 120) + R(50, 60, 32, 56, "#fff", 3) + T(45, 24, "frame.", 12, "#111", 400, "middle", 'font-style="italic" font-family="Georgia,serif"'),
   "pill-glow": (acc) => R(20, 40, 50, 10, acc, 5),
+  "mosaico-vivo": (acc) => [0, 1, 2, 3].map((i) => R(3, 4 + i * 40, 17, 34, ["#BFD9EE", "#D9CDB8", "#C9D8C0", "#E3C9C9"][i], 2) + R(70, 24 + i * 40, 17, 34, ["#CFCFE6", "#BFD9EE", "#D9CDB8", "#C9D8C0"][i], 2)).join(""),
   "glass-card": (acc) => R(8, 20, 74, 30, "rgba(255,255,255,.18)", 4, 'stroke="rgba(255,255,255,.4)" stroke-width=".6"') + lines(14, 27, 50, 3, 6, "#fff"),
   "player-capitulos": (acc) => R(8, 136, 74, 2, "#ccc", 1) + R(8, 136, 30, 2, acc, 1) + [8, 33, 58].map((x) => O(x, 137, 2.5, "#fff")).join(""),
   "film-strip": (acc) => [0, 1, 2, 3].map((i) => R(2 + i * 22, 20, 20, 14, "#2b2b33", 1.5, 'stroke="#fff" stroke-width=".5"')).join(""),

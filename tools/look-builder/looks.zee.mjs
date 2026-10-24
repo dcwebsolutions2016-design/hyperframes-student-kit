@@ -8,6 +8,8 @@ import { SKILLS, HOOKS, CAPTIONS, ELEMENTS, MOTIONS, PRESETS } from "./looks.mjs
 
 SKILLS["zee-effects"] = { name: "Efeitos Zee (reel)", cmd: "/short-form-edit", note: "Rótulos amarelos, cards de citação, prompt da IA, shrink frame, mockups e legendas manuscritas." };
 
+const TONES = ["#d97757", "#b57c62", "#4e6a8a", "#748a52", "#8c6e5a", "#3d3f44", "#c9b27a", "#2f7d78"];
+const toneBg = (i, deg = 160) => `linear-gradient(${deg}deg,${TONES[i % TONES.length]},#1b1a18)`;
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const byId = (arr, id) => arr.find((x) => x.id === id);
 const disp = (S, size, extra = "") => `font-family:${S.font.display};font-weight:${S.font.dw};font-size:${size}px;${S.font.stretch ? `font-stretch:${S.font.stretch};` : ""}${extra}`;
@@ -17,7 +19,7 @@ const caseOf = (S, t) => (S.font.caps ? String(t).toUpperCase() : S.font.lower ?
 const onAcc = (S) => (/ffd21f|f4e27c|F5D82A|ffffff|efe9dc/i.test(S.v.acc) ? "#111" : "#fff");
 const firstWord = (t) => String(t || "").split(" ")[0].replace(/[?!,.]/g, "");
 function chunk(ws, n) { const out = []; let cur = []; for (const w of ws) { cur.push(w); if (cur.length >= n) { out.push(cur.join(" ")); cur = []; } } if (cur.length) out.push(cur.join(" ")); return out; }
-const thumbs = (n) => Array.from({ length: n }).map((_, i) => `<div class="th" style="border-radius:12px;background:linear-gradient(${i * 31}deg,hsl(${(i * 47) % 360} 40% 38%),hsl(${(i * 47 + 40) % 360} 35% 22%))"></div>`).join("");
+const thumbs = (n) => Array.from({ length: n }).map((_, i) => `<div class="th" style="border-radius:12px;background:${toneBg(i, 160 + i * 20)}"></div>`).join("");
 
 // ------------------------------------------------------------ hooks
 HOOKS.push(
