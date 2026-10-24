@@ -1,0 +1,63 @@
+# Look builder
+
+Um assistente local de 7 passos para escolher o visual de um vídeo **em cima do seu próprio clipe**
+antes de pedir a edição ao Claude. Inspirado no "Look builder" que a criadora Zee mostrou no Instagram:
+em vez de ler DESIGN.md e registry.json, você vê cada opção renderizada sobre um frame da sua gravação,
+clica em "Escolher" ou "Mais como essa", e no fim salva um `look.json` que as skills do kit leem.
+
+Cada opção vem de uma skill ou estilo deste kit: `reel-oney`, `reel-editorial-oney`, `anuncios-oney`,
+`video-colagem-oney`, `reel-explicativo-oney`, `vsl` (roxo, laranja, clean) e `style-library`
+(`02-kallaway`, `01-vox-explainer`). As regras de "o que não fazer" de cada DESIGN.md viram avisos de conflito.
+
+## Como usar
+
+```bash
+npm run look-builder
+```
+
+Abra <http://localhost:8765/>. Para começar já com um clipe:
+
+```bash
+node tools/look-builder/server.mjs --clip "video-projects/meu-reel/assets/raw.mp4"
+```
+
+1. **Clipe**: escolha um vídeo listado (`video-projects/*/assets`, `meus-videos/`, `raw-media/`) ou cole um caminho.
+   Dê Play/Pause: o frame em que você pausar vira o fundo de todos os cards.
+2. **Guias**: arraste "Topo da cabeça" e "Legenda (topo)". Tudo acima da cabeça e as legendas se posicionam por aí.
+3. **Texto de exemplo**: edite o gancho, a frase das legendas, a palavra-chave e o @, ou use
+   "Usar a transcrição do projeto" (lê `assets/transcript.json` ou `assets/raw.json`).
+4. **Passos 1 a 6**: Cores → Fontes → Gancho → Legendas → Elementos → Motion. Cada passo usa o que você já escolheu.
+   "Começo rápido" aplica um preset inteiro (um look pronto de uma skill); dá para mudar qualquer peça depois.
+   "Mais como essa" anota um pedido de variação para o Claude, sem quebrar o fluxo.
+5. **Revisão**: confira, escolha (ou aceite) a skill executora, leia os conflitos, escreva notas,
+   e **Salvar look.json** grava em `video-projects/<slug>/look.json` e copia um prompt pronto.
+6. Cole o prompt no Claude Code. As skills Oney leem o `look.json` (regra em `.claude/skills/_perfil-oney.md`).
+
+## O que vai no look.json
+
+```json
+{
+  "clip": "…/assets/raw.mp4", "orientation": "9:16", "canvas": {"width":1080,"height":1920},
+  "framing": {"headTop": 620, "capTop": 1150},
+  "preset": "editorial", "skill": "reel-editorial-oney", "skillCommand": "/reel-editorial-oney",
+  "colours": {"id":"butter","acc":"#f4e27c", "...": "…"}, "fonts": {"id":"inter-serif", "...": "…"},
+  "hook": {"id":"serif-stack"}, "captions": {"id":"one-word-lower"},
+  "elements": [{"id":"print-card"}, {"id":"handwritten-note"}], "motion": [{"id":"blur-rise"}, {"id":"punch-in"}],
+  "sampleText": {"...": "…"}, "extras": [{"step":"fonts","base":"inter-serif","ask":"mais fina"}],
+  "notes": "…", "conflicts": []
+}
+```
+
+`video-projects/` é gitignorado, então o look.json fica privado junto com o seu vídeo.
+
+## Estender
+
+- `looks.js` é o catálogo. Para uma opção nova, adicione um objeto com `id`, `name`, `desc`, `skills`
+  (onde ela é nativa) e um `render(S)` que escreve HTML em pixels de 1080 (ou 1920) de largura; `S.v` são as
+  cores, `S.font` as fontes, `S.headTop`/`S.capTop` o enquadramento, `S.text` o texto de exemplo.
+- `CONFLICTS` em `looks.js` traduz os "What NOT to do" de cada DESIGN.md. Se mudar uma skill, atualize ali.
+- Fontes: o servidor serve `/fonts/<arquivo>` procurando nas pastas `template/fonts` das skills. Anton, Bebas,
+  Fraunces, Archivo e Playfair vêm do Google Fonts (precisa de internet só para esses).
+
+O preview é uma aproximação em HTML/GSAP para decidir o look. A edição real continua sendo feita pela skill
+com HyperFrames, snapshots e render, como sempre.

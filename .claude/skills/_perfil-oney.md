@@ -16,3 +16,11 @@ UMA vez, numa mensagem só, e salve:
 
 Use esses dados sempre que um template mostrar nome, @, avatar ou número de seguidores.
 Nunca invente números, logos, capas ou prints. Se faltar algo, peça ao aluno o print exato.
+
+## Look escolhido pelo aluno (Look builder)
+
+Se existir `video-projects/<slug>/look.json` (gerado por `npm run look-builder`, em `tools/look-builder/`),
+leia-o antes de qualquer decisão visual e honre as escolhas: `colours`, `fonts`, `hook`, `captions`,
+`elements`, `motion`, `framing.headTop` / `framing.capTop`, `extras` (variações pedidas) e `notes`.
+O campo `skill` diz qual skill o aluno espera; `conflicts` lista o que o look contraria no DESIGN.md
+dessa skill — resolva isso com o aluno antes de montar (não ignore nem "corrija" em silêncio).
