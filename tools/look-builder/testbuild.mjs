@@ -8,6 +8,8 @@ import { join, resolve, dirname, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, execFileSync } from "node:child_process";
 import { COLOURS, FONTS, HOOKS, CAPTIONS, ELEMENTS, MOTIONS, ldsCaption } from "./looks.mjs";
+import "./looks.zee.mjs";
+import "./looks.castilho.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "..", "..");
@@ -36,7 +38,19 @@ export function stateFromLook(look) {
   const f = byId(FONTS, look.fonts?.id) || FONTS[0];
   const W = look.canvas?.width || 1080, H = look.canvas?.height || 1920;
   const text = { hook1: "Larguei meu emprego?", hook2: "a parte que ninguém conta", words: ["isso", "era", "o", "sonho"], keyword: "sonho", note: "eu quase desisti aqui", comment: "quero esse estilo!", user: "seu_usuario", ...(look.sampleText || {}) };
-  return { v: { ...c.vars, ...(look.colours || {}) }, font: f, text, W, H, landscape: W > H, headTop: look.framing?.headTop ?? 620, capTop: look.framing?.capTop ?? 1150 };
+  // fonts from the user's folder override roles (copied into the test project by buildTestProject)
+  const font = { ...f };
+  for (const [role, uf] of Object.entries(look.userFonts || look.fonts?.custom || {})) { if (!uf || !uf.file) continue; font[role] = `'uf-${uf.id}',${f[role] || f.display}`; if (role === "display") font.dw = 400; if (role === "body") font.bw = 400; }
+  return { v: { ...c.vars, ...(look.colours || {}) }, font, text, W, H, landscape: W > H, headTop: look.framing?.headTop ?? 620, capTop: look.framing?.capTop ?? 1150 };
+}
+function userFontFaces(look, dir) {
+  const out = [];
+  for (const [, uf] of Object.entries(look.userFonts || look.fonts?.custom || {})) {
+    if (!uf || !uf.file || !existsSync(uf.file)) continue;
+    const name = "uf-" + uf.id + extname(uf.file).toLowerCase();
+    try { copyFileSync(uf.file, join(dir, "assets", "fonts", name)); out.push(`@font-face{font-family:"uf-${uf.id}";src:url("assets/fonts/${name}")}`); } catch {}
+  }
+  return out.join("\n");
 }
 
 function captionOf(look) {
@@ -51,19 +65,19 @@ export function planFromLook(look, dur) {
   const els = (look.elements || []).map((e) => byId(ELEMENTS, e.id)).filter(Boolean);
   const motions = (look.motion || []).map((m) => byId(MOTIONS, m.id)).filter(Boolean);
   const objM = motions.filter((m) => !m.camera), camM = motions.filter((m) => m.camera);
-  const elBeats = els.map((e, i) => ({ el: e, t0: 2.9 + i * 1.5, motion: objM[i % Math.max(1, objM.length)] || byId(MOTIONS, "blur-rise") }));
+  let t = 2.9; const elBeats = els.map((e, i) => { const b = { el: e, t0: +t.toFixed(2), motion: objM[i % Math.max(1, objM.length)] || byId(MOTIONS, "blur-rise") }; t += e.anim ? 3.2 : 1.5; return b; });
   const capDt = caps ? (caps.mode === "lds" ? 1.3 : caps.mode === "phrase" ? 1.2 : 0.34) : 0;
   return { hook, caps, capDt, elBeats, camM, dur };
 }
 
-export function compositionHtml(look, S, plan, clipRel, clipDur) {
+export function compositionHtml(look, S, plan, clipRel, clipDur, extraCss = "") {
   const D = plan.dur;
   const id = "look-test";
   const wrap = (inner, start, d, track, extra = "") => inner ? `<div class="clip" data-start="${start}" data-duration="${d.toFixed(2)}" data-track-index="${track}" style="position:absolute;inset:0;pointer-events:none;${extra}">${inner}</div>` : "";
   let track = 1, body = "";
   body += wrap(plan.hook && plan.hook.id !== "none" ? plan.hook.render(S) : "", 0, Math.min(D, 3.5), track++);
   body += wrap(plan.caps ? plan.caps.render(S) : "", 0, D, track++);
-  for (const b of plan.elBeats) body += wrap(b.el.render(S), b.t0 > 0 ? b.t0.toFixed(2) : 0, Math.min(2.9, D - b.t0), track++, `--t0:${b.t0}`);
+  for (const b of plan.elBeats) body += wrap(b.el.render(S), b.t0 > 0 ? b.t0.toFixed(2) : 0, Math.max(0.5, Math.min(b.el.anim ? 3.3 : 2.9, D - b.t0)), track++, `--t0:${b.t0}`);
   // animation code: closures from looks.mjs serialised verbatim; `cycle` mirrors app.js cycleWords/playCaptions
   const anims = [];
   if (plan.hook && plan.hook.id !== "none") anims.push(`{ const h = document.querySelector("#${id} .hook"); if (h) { (${plan.hook.anim.toString()})(tl, h); tl.to(h, { opacity: 0, duration: 0.25 }, 3.2); } }`);
@@ -72,12 +86,12 @@ export function compositionHtml(look, S, plan, clipRel, clipDur) {
     ${plan.caps.mode === "phrase" ? `ws.forEach((x, i) => tl.from(x, { y: 16, opacity: 0, duration: 0.3 }, start + i * dt));` : ""}
     ${plan.caps.mode === "lds" ? `ws.forEach((x, i) => tl.from([...x.querySelectorAll(".ldw")], { y: 14, opacity: 0, scale: 0.92, duration: 0.22, stagger: 0.18, ease: "back.out(1.6)" }, start + i * dt));` : ""} } }`);
   plan.elBeats.forEach((b, i) => anims.push(`{ const e = document.querySelectorAll("#${id} .el")[${i}]; if (e) { const t0 = ${b.t0};
-    const sub = gsap.timeline(); (${b.motion.anim.toString()})(sub, e, cam); tl.add(sub, t0);
+    const sub = gsap.timeline(); (${(b.el.anim || b.motion.anim).toString()})(sub, e, cam); tl.add(sub, t0);
     if (e.querySelector(".num,.bar")) { const t = gsap.timeline(); (${byId(MOTIONS, "count-tick").anim.toString()})(t, e); tl.add(t, t0 + 0.2); }
     e.querySelectorAll("path").forEach((p) => { const L = p.getTotalLength(); p.style.strokeDasharray = L; tl.fromTo(p, { strokeDashoffset: L }, { strokeDashoffset: 0, duration: 0.45 }, t0 + 0.2); });
     const li = e.querySelectorAll(".li,.row,.ch"); if (li.length) tl.from(li, { opacity: 0, y: 10, duration: 0.3, stagger: 0.18 }, t0 + 0.1);
     const strip = e.querySelector(".strip"); if (strip) tl.to(strip, { x: -900, duration: 4, ease: "none" }, t0);
-    tl.to(e, { opacity: 0, duration: 0.25 }, t0 + 2.6); } }`));
+    tl.to(e, { opacity: 0, duration: 0.25 }, t0 + ${b.el.anim ? 3.0 : 2.6}); } }`));
   plan.camM.forEach((m, i) => anims.push(`{ const t = gsap.timeline(); (${m.anim.toString()})(t, null, cam); tl.add(t, ${3 + i * 3}); }`));
   const google = `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Fraunces:ital,wght@0,300;0,900;1,900&family=Archivo:wght@400;500;700&family=Playfair+Display:wght@700&family=Space+Mono&display=block">`;
   return `<!doctype html>
@@ -86,6 +100,7 @@ export function compositionHtml(look, S, plan, clipRel, clipDur) {
 ${google}
 <style>
 ${FONT_FACES}
+${extraCss}
 *{box-sizing:border-box}html,body{margin:0;width:${S.W}px;height:${S.H}px;overflow:hidden;background:#000}
 #${id}{position:relative;width:${S.W}px;height:${S.H}px;overflow:hidden;background:#000}
 #cam{position:absolute;inset:0;overflow:hidden;transform-origin:50% 50%}
@@ -128,7 +143,7 @@ export function buildTestProject(look, { projectDir, clip, from = 0, dur = 8 }) 
   const clipDur = Math.min(dur, clipDuration(out));
   const S = stateFromLook(look);
   const plan = planFromLook(look, dur);
-  const html = compositionHtml(look, S, plan, "assets/" + out.split(/[\\/]/).pop(), clipDur);
+  const html = compositionHtml(look, S, plan, "assets/" + out.split(/[\\/]/).pop(), clipDur, userFontFaces(look, dir));
   writeFileSync(join(dir, "index.html"), html);
   writeFileSync(join(dir, "hyperframes.json"), JSON.stringify({ $schema: "https://hyperframes.heygen.com/schema/hyperframes.json", paths: { blocks: "compositions", components: "compositions/components", assets: "assets" } }, null, 2) + "\n");
   // Frames worth looking at: hook, first captions, each element entrance (+0.5 s), a late frame.

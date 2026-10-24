@@ -1,5 +1,7 @@
 // Look builder — app. Seven steps; every card renders the chosen look over a frame of the user's own clip.
 import { SKILLS, COLOURS, FONTS, HOOKS, CAPTIONS, ELEMENTS, MOTIONS, PRESETS, CONFLICTS, ldsCaption } from "./looks.mjs";
+import "./looks.zee.mjs";      // effects from the zeemagede reel (frame-by-frame analysis)
+import "./looks.castilho.mjs"; // the 35 effects from castilhoia.com
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -16,7 +18,7 @@ async function loadLds() {
 }
 
 // ------------------------------------------------------------------ state
-const L = { preset: null, skill: null, colours: null, fonts: null, hook: null, captions: null, ldsEntrada: null, elements: [], motion: [], extras: [], notes: "" };
+const L = { preset: null, skill: null, colours: null, fonts: null, userFonts: {}, hook: null, captions: null, ldsEntrada: null, elements: [], motion: [], extras: [], notes: "" };
 const UI = {
   step: 0, clip: null, clipProject: null, W: 1080, H: 1920, landscape: false, headTop: 620, capTop: 1150, poster: "",
   text: { hook1: "Larguei meu emprego?", hook2: "a parte que ninguém conta", words: "isso era o sonho de verdade e ninguém fala".split(" "), keyword: "sonho", note: "eu quase desisti aqui", comment: "quero esse estilo! como faz?", user: "seu_usuario" },
@@ -37,10 +39,21 @@ const video = $("#video"), stage = $("#stage"), world = $("#world"), cam = $("#c
 // ------------------------------------------------------------------ derived style state for renderers
 function S() {
   const c = byId(COLOURS, L.colours) || COLOURS[0];
-  const f = byId(FONTS, L.fonts) || FONTS[0];
-  return { v: c.vars, font: f, text: UI.text, W: UI.W, H: UI.H, landscape: UI.landscape, headTop: UI.headTop, capTop: UI.capTop };
+  return { v: c.vars, font: fontWithUser(byId(FONTS, L.fonts) || FONTS[0]), text: UI.text, W: UI.W, H: UI.H, landscape: UI.landscape, headTop: UI.headTop, capTop: UI.capTop };
 }
-function withPick(over) { const s = S(); if (over.colours) s.v = byId(COLOURS, over.colours).vars; if (over.fonts) s.font = byId(FONTS, over.fonts); return s; }
+function withPick(over) { const s = S(); if (over.colours) s.v = byId(COLOURS, over.colours).vars; if (over.fonts) s.font = fontWithUser(byId(FONTS, over.fonts)); return s; }
+// Fonts from the user's own folder override roles of the chosen pair (display / body / serif / hand / mono).
+function fontWithUser(f) {
+  const out = { ...f };
+  for (const [role, uf] of Object.entries(L.userFonts || {})) { if (!uf) continue; ensureUserFontFace(uf); out[role] = `'uf-${uf.id}',${f[role] || f.display}`; if (role === "display") { out.dw = 400; } if (role === "body") out.bw = 400; }
+  return out;
+}
+const USER_FACES = new Set();
+function ensureUserFontFace(uf) {
+  if (USER_FACES.has(uf.id)) return;
+  USER_FACES.add(uf.id);
+  try { const face = new FontFace(`uf-${uf.id}`, `url(/userfont/${uf.id})`); document.fonts.add(face); face.load().then(() => { renderStep(); rebuildMain(); }).catch(() => {}); } catch {}
+}
 
 // ------------------------------------------------------------------ clip
 async function loadClips() {
@@ -73,12 +86,13 @@ function applyLook(j) {
   L.preset = j.preset || null; L.skill = j.skill || null;
   L.colours = id(j.colours); L.fonts = id(j.fonts); L.hook = id(j.hook); L.captions = id(j.captions);
   L.ldsEntrada = j.ldsEntrada || (j.captions && j.captions.lds && j.captions.lds.entradaId) || null;
+  L.userFonts = j.userFonts || (j.fonts && j.fonts.custom) || {};
   L.elements = (j.elements || []).map(id).filter(Boolean); L.motion = (j.motion || []).map(id).filter(Boolean);
   L.extras = j.extras || []; L.notes = j.notes || "";
   if (j.framing) { UI.pendingFraming = j.framing; }
   if (j.sampleText) Object.assign(UI.text, j.sampleText);
   if (j.text) Object.assign(UI.text, j.text);
-  syncTextInputs();
+  syncTextInputs(); ensureSavedUserFonts();
   return true;
 }
 async function restoreForClip(path) {
@@ -95,7 +109,7 @@ function syncTextInputs() {
   const w = $("#wordsIn"); if (w) w.value = (UI.text.words || []).join(" ");
 }
 function resetAll() {
-  Object.assign(L, { preset: null, skill: null, colours: null, fonts: null, hook: null, captions: null, ldsEntrada: null, elements: [], motion: [], extras: [], notes: "" });
+  Object.assign(L, { preset: null, skill: null, colours: null, fonts: null, userFonts: {}, hook: null, captions: null, ldsEntrada: null, elements: [], motion: [], extras: [], notes: "" });
   try { if (UI.clip) localStorage.removeItem(LS + UI.clip); } catch {}
   UI.step = 0; renderStep(); rebuildMain(); toast("Look limpo.");
 }
@@ -237,7 +251,7 @@ function renderNav() {
 function renderPicks() {
   const n = (arr, id) => (byId(arr, id) || {}).name;
   const items = [
-    L.colours && ["Cores", n(COLOURS, L.colours), 0], L.fonts && ["Fontes", n(FONTS, L.fonts), 1], L.hook && ["Gancho", n(HOOKS, L.hook), 2],
+    L.colours && ["Cores", n(COLOURS, L.colours), 0], (L.fonts || Object.keys(L.userFonts || {}).length) && ["Fontes", [n(FONTS, L.fonts), ...Object.values(L.userFonts || {}).filter(Boolean).map((u) => u.name)].filter(Boolean).join(" + "), 1], L.hook && ["Gancho", n(HOOKS, L.hook), 2],
     L.captions && ["Legendas", (capById(L.captions) || {}).name, 3], L.elements.length && ["Elementos", `${L.elements.length}`, 4], L.motion.length && ["Motion", `${L.motion.length}`, 5],
   ].filter(Boolean);
   $("#picks").innerHTML = items.map(([k, v, i]) => `<button data-i="${i}" title="Ir para ${k}"><i></i>${k}: <b>${esc(v)}</b></button>`).join("");
@@ -266,7 +280,7 @@ function card({ idx, id, name, desc, skills = [], on, body = "", swatches, multi
   </article>`;
 }
 function wireCards(step, multi) {
-  $$(".card").forEach((el) => {
+  $$(".card:not(.uf)").forEach((el) => {
     const id = el.dataset.id;
     $(".take", el).onclick = () => { pick(step, id, multi); renderStep(); rebuildMain(); autosave(); };
     $(".more", el).onclick = () => el.classList.toggle("more");
@@ -313,6 +327,41 @@ function fillPresetCards() {
   });
 }
 
+// ---- the user's font folder (server indexes it; /api/userfonts searches; /userfont/<id> serves the file)
+const UF = { dir: null, total: 0, families: 0, items: [], q: "", role: "display", loaded: false, offset: 0 };
+const UF_ROLES = [["display", "Display (títulos)"], ["body", "Corpo (legendas)"], ["serif", "Voz serifada"], ["hand", "Manuscrita"], ["mono", "Mono / UI"]];
+async function loadUserFonts(q = UF.q, offset = 0) {
+  try { const r = await fetch(`/api/userfonts?q=${encodeURIComponent(q)}&limit=48&offset=${offset}`).then((x) => x.json()); Object.assign(UF, { dir: r.dir, total: r.total, families: r.families, items: offset ? UF.items.concat(r.items) : r.items, loaded: true, offset }); } catch { UF.loaded = true; }
+  if (UI.step === 1) renderStep();
+}
+function userFontsSection() {
+  const used = Object.entries(L.userFonts || {}).filter(([, u]) => u);
+  const head = divider(`Minha pasta de fontes${UF.total ? ` (${UF.total.toLocaleString("pt-BR")} arquivos · ${UF.families.toLocaleString("pt-BR")} famílias)` : ""}`, UF.dir ? `${UF.dir}. Escolha o papel e clique numa fonte; ela substitui esse papel no par escolhido acima.` : "Pasta não encontrada: defina USER_FONTS=<pasta> ao iniciar o servidor.");
+  const roles = `<div class="uf-bar" style="grid-column:1/-1"><div class="uf-roles">${UF_ROLES.map(([k, t]) => `<button class="${UF.role === k ? "on" : ""}" data-role="${k}">${t}${L.userFonts?.[k] ? ` <b>· ${esc(L.userFonts[k].name)}</b>` : ""}</button>`).join("")}</div><input id="ufSearch" placeholder="buscar fonte ou pasta… (ex.: script, bold, Rock)" value="${esc(UF.q)}" spellcheck="false">${used.length ? `<button class="btn sm" id="ufClear">Limpar fontes da pasta</button>` : ""}</div>`;
+  if (!UF.loaded) { loadUserFonts(); return head + roles + `<p class="hint" style="grid-column:1/-1">Indexando a pasta… (a primeira vez pode levar alguns segundos)</p>`; }
+  const sample = UF.role === "hand" ? UI.text.note : UF.role === "body" ? UI.text.words.slice(0, 3).join(" ") : UI.text.hook1;
+  const cards = UF.items.map((f) => `<article class="card uf ${used.some(([, u]) => u.id === f.id) ? "on" : ""}" data-uf="${f.id}" data-name="${esc(f.name)}" data-file="${esc(f.folder)}"><div class="uf-sample" style="font-family:'uf-${f.id}',sans-serif" data-id="${f.id}">${esc(sample)}</div><div class="meta"><b>${esc(f.family)}</b><span>${esc(f.style)} · ${esc(f.folder || "raiz")}</span></div><div class="acts"><button class="btn take">Usar como ${esc(UF_ROLES.find(([k]) => k === UF.role)[1].split(" ")[0].toLowerCase())}</button></div></article>`).join("");
+  const more = UF.items.length < UF.families ? `<button class="btn" id="ufMore" style="grid-column:1/-1;justify-self:center">Mostrar mais (${UF.items.length} de ${UF.families})</button>` : "";
+  return head + roles + cards + more;
+}
+function wireUserFonts() {
+  $$(".uf-roles button").forEach((b) => (b.onclick = () => { UF.role = b.dataset.role; renderStep(); }));
+  const s = $("#ufSearch"); if (s) { s.oninput = () => { clearTimeout(s._t); s._t = setTimeout(() => { UF.q = s.value.trim(); loadUserFonts(UF.q, 0); }, 250); }; s.onkeydown = (e) => { if (e.key === "Enter") { UF.q = s.value.trim(); loadUserFonts(UF.q, 0); } }; }
+  const m = $("#ufMore"); if (m) m.onclick = () => loadUserFonts(UF.q, UF.items.length);
+  const c = $("#ufClear"); if (c) c.onclick = () => { L.userFonts = {}; renderStep(); rebuildMain(); autosave(); };
+  // lazy @font-face per visible sample
+  const io = new IntersectionObserver((ents) => ents.forEach((en) => { if (en.isIntersecting) { ensureUserFontFace({ id: Number(en.target.dataset.id) }); io.unobserve(en.target); } }), { rootMargin: "200px" });
+  $$(".uf-sample").forEach((el) => io.observe(el));
+  $$(".card.uf .take").forEach((b) => (b.onclick = async (e) => {
+    const card = e.target.closest(".card"); const id = Number(card.dataset.uf);
+    let file = card.dataset.file; try { const r = await fetch(`/api/userfont-file?id=${id}`).then((x) => x.json()); if (r.file) file = r.file; } catch {}
+    L.userFonts = { ...(L.userFonts || {}), [UF.role]: { id, name: card.dataset.name, file } };
+    L.preset = null; renderStep(); rebuildMain(); autosave(); toast(`${card.dataset.name} agora é a fonte ${UF.role}.`);
+  }));
+}
+// restore @font-face for fonts saved in a draft / look.json
+function ensureSavedUserFonts() { Object.values(L.userFonts || {}).forEach((u) => u && ensureUserFontFace(u)); }
+
 // cycle one-word captions inside an element
 function cycleWords(tl, el, start = 0, dt = 0.34, hold = 0) {
   const ws = $$(".w", el); if (!ws.length) return;
@@ -341,18 +390,32 @@ function renderStep() {
       `<span class="lbl status ${LDS.available ? "ok" : ""}">${LDS.available ? "✓ Catálogo LDS carregado: " + lds : "LDS: " + lds + " (Desktop\\EFEECTCRAFT EDITOR CLAUDE\\catalogo ou LDS_CATALOG)"}</span>`;
     $$("#quick button[data-f]").forEach((b) => (b.onclick = () => { UI.capFilter = b.dataset.f; renderStep(); }));
   }
+  if (st.id === "elements" || st.id === "motion") {
+    UI.flt = UI.flt || { q: "", fam: "all" };
+    const fams = [["all", "Todos"], ["oney", "Oney"], ["zee-effects", "Zee"], ["castilho-35", "35 efeitos"], ["lib", "style-library"]];
+    $("#quick").innerHTML = `<span class="lbl">Mostrar:</span>` + fams.map(([k, t]) => `<button class="${UI.flt.fam === k ? "on" : ""}" data-fam="${k}">${t}</button>`).join("") + `<input id="fltSearch" placeholder="buscar… (ex.: celular, carimbo, zoom)" value="${esc(UI.flt.q)}" spellcheck="false">`;
+    $$("#quick button[data-fam]").forEach((b) => (b.onclick = () => { UI.flt.fam = b.dataset.fam; renderStep(); }));
+    const si = $("#fltSearch"); si.oninput = () => { clearTimeout(si._t); si._t = setTimeout(() => { UI.flt.q = si.value.trim(); const pos = si.selectionStart; renderStep(); const n = $("#fltSearch"); if (n) { n.focus(); n.setSelectionRange(pos, pos); } }, 220); };
+  }
   $$("#quick button[data-p]").forEach((b) => (b.onclick = () => applyPreset(b.dataset.p)));
   const sp = $("#surprise"); if (sp) sp.onclick = surprise;
   const s = S();
   if (st.id === "review") return renderReview(grid);
   const multi = st.id === "elements" || st.id === "motion";
-  const list = st.id === "captions" && UI.capFilter === "lds" ? [] : { colours: COLOURS, fonts: FONTS, hook: HOOKS, captions: CAPTIONS, elements: ELEMENTS, motion: MOTIONS }[st.id];
+  let list = st.id === "captions" && UI.capFilter === "lds" ? [] : { colours: COLOURS, fonts: FONTS, hook: HOOKS, captions: CAPTIONS, elements: ELEMENTS, motion: MOTIONS }[st.id];
+  if ((st.id === "elements" || st.id === "motion") && UI.flt) {
+    const famOf = (o) => (o.skills || []);
+    const inFam = (o) => UI.flt.fam === "all" || (UI.flt.fam === "oney" ? famOf(o).some((k) => /oney|vsl/.test(k)) : UI.flt.fam === "lib" ? famOf(o).some((k) => /kallaway|vox/.test(k)) : famOf(o).includes(UI.flt.fam));
+    const q = UI.flt.q.toLowerCase();
+    list = list.filter((o) => (inFam(o) || L[st.id].includes(o.id)) && (!q || `${o.name} ${o.desc || ""}`.toLowerCase().includes(q)));
+  }
   let html = list.map((o, i) => card({
     idx: i + 1, id: o.id, name: o.name, desc: o.sub || o.desc, skills: o.skills, multi, step: st.id,
     on: multi ? L[st.id].includes(o.id) : L[st.id] === o.id,
     swatches: st.id === "colours" ? [o.vars.bg, o.vars.acc, o.vars.txt, o.vars.sec] : null,
     body: frameHtml(st.id === "colours" ? withPick({ colours: o.id }) : st.id === "fonts" ? withPick({ fonts: o.id }) : s),
   })).join("");
+  if (st.id === "fonts") html += userFontsSection();
   // Legenda Dinâmica (EffectCraft): real GIF previews from the user's catalogue
   if (st.id === "captions" && LDS.available && UI.capFilter !== "kit") {
     html += divider(`Legenda Dinâmica · EffectCraft (${LDS.prontos.length})`, "Prontos do Legenda Dinâmica Studio: palavra-chave gigante, conectivos pequenos, entrada palavra por palavra. Prévia real do catálogo; no palco à esquerda, uma aproximação nas suas cores. A entrada se escolhe no passo Motion.");
@@ -364,6 +427,7 @@ function renderStep() {
   }
   grid.innerHTML = html;
   wireCards(st.id, multi);
+  if (st.id === "fonts") wireUserFonts();
   requestAnimationFrame(() => { scaleWorlds(); const cards = $$(".card"); list.forEach((o, i) => fillCard(st.id, o, cards[i])); });
 }
 
@@ -396,6 +460,7 @@ function fillCard(step, o, el) {
   if (step === "elements") {
     w.innerHTML = o.render(S());
     const e = $(".el", w); if (!e) return;
+    if (o.anim) { o.anim(tl, e, camEl); tl.to({}, { duration: 1.2 }); return; }
     const m = entrance(L.motion[0]);
     if (m.camera) byId(MOTIONS, "blur-rise").anim(tl, e); else m.anim(tl, e, camEl);
     const tick = byId(MOTIONS, "count-tick"); if ($(".num,.bar", e)) tick.anim(tl, e);
@@ -439,9 +504,11 @@ function rebuildMain() {
   const motions = L.motion.map((m) => byId(MOTIONS, m)).filter(Boolean);
   const camM = motions.filter((m) => m.camera), objM = motions.filter((m) => !m.camera);
   $$(".el", world).forEach((e, i) => {
-    const t0 = 2.9 + i * 1.5;
-    const m = objM[i % Math.max(1, objM.length)] || byId(MOTIONS, "blur-rise");
+    const def = els[i];
+    const t0 = 2.9 + i * (def && def.anim ? 3.2 : 1.5);
     gsap.set(e, { opacity: 0 }); mainTl.set(e, { opacity: 1 }, t0);
+    if (def && def.anim) { const sub = gsap.timeline(); def.anim(sub, e, cam); mainTl.add(sub, t0); mainTl.to(e, { opacity: 0, duration: 0.25 }, t0 + 3.0); return; }
+    const m = objM[i % Math.max(1, objM.length)] || byId(MOTIONS, "blur-rise");
     const sub = gsap.timeline(); m.anim(sub, e, cam); mainTl.add(sub, t0);
     if ($(".num,.bar", e)) { const t = gsap.timeline(); byId(MOTIONS, "count-tick").anim(t, e); mainTl.add(t, t0 + 0.2); }
     $$("path", e).forEach((p) => { const Lz = p.getTotalLength(); p.style.strokeDasharray = Lz; mainTl.fromTo(p, { strokeDashoffset: Lz }, { strokeDashoffset: 0, duration: 0.45 }, t0 + 0.2); });
@@ -450,7 +517,7 @@ function rebuildMain() {
     mainTl.to(e, { opacity: 0, duration: 0.25 }, t0 + 2.6);
   });
   camM.forEach((m, i) => { const t = gsap.timeline(); m.anim(t, null, cam); mainTl.add(t, 3 + i * 3); });
-  const total = Math.max(5, 3.2 + $$(".el", world).length * 1.5 + 1.5, caps ? 0.3 + $$(".w", world).length * (caps.mode === "lds" ? 1.3 : caps.mode === "phrase" ? 1.2 : 0.34) + 0.5 : 0);
+  const total = Math.max(5, 3.2 + els.reduce((a, d) => a + (d.anim ? 3.2 : 1.5), 0) + 1.5, caps ? 0.3 + $$(".w", world).length * (caps.mode === "lds" ? 1.3 : caps.mode === "phrase" ? 1.2 : 0.34) + 0.5 : 0);
   mainTl.to({}, { duration: 0.1 }, total);
   $("#jsonPre").textContent = JSON.stringify(lookJson(), null, 2);
   autosave();
@@ -481,7 +548,8 @@ function lookJson() {
     framing: { headTop: UI.headTop, capTop: UI.capTop },
     preset: L.preset, skill, skillCommand: skill ? SKILLS[skill].cmd : null,
     colours: L.colours ? { id: L.colours, name: name(COLOURS, L.colours), ...byId(COLOURS, L.colours).vars } : null,
-    fonts: L.fonts ? { id: L.fonts, name: name(FONTS, L.fonts), display: byId(FONTS, L.fonts).display, body: byId(FONTS, L.fonts).body, serif: byId(FONTS, L.fonts).serif || null, hand: byId(FONTS, L.fonts).hand || null } : null,
+    fonts: L.fonts || Object.keys(L.userFonts || {}).length ? { id: L.fonts, name: L.fonts ? name(FONTS, L.fonts) : "só fontes da pasta", display: L.fonts ? byId(FONTS, L.fonts).display : null, body: L.fonts ? byId(FONTS, L.fonts).body : null, serif: (L.fonts && byId(FONTS, L.fonts).serif) || null, hand: (L.fonts && byId(FONTS, L.fonts).hand) || null, custom: Object.keys(L.userFonts || {}).length ? L.userFonts : undefined } : null,
+    userFonts: Object.keys(L.userFonts || {}).length ? L.userFonts : undefined,
     hook: L.hook ? { id: L.hook, name: name(HOOKS, L.hook) } : null,
     captions: captionsJson(), ldsEntrada: L.ldsEntrada,
     elements: L.elements.map((id) => ({ id, name: name(ELEMENTS, id) })),
@@ -495,7 +563,7 @@ function promptText() {
   const list = (a) => a.map((x) => x.name).join(", ") || "—";
   return `${cmd} edita "${UI.clip || "<caminho do vídeo>"}" no projeto video-projects/${slug}.
 Siga video-projects/${slug}/look.json (gerado pelo Look builder) em todas as decisões visuais:
-- Cores: ${j.colours?.name || "—"} · Fontes: ${j.fonts?.name || "—"}
+- Cores: ${j.colours?.name || "—"} · Fontes: ${j.fonts?.name || "—"}${j.userFonts ? ` · da pasta do aluno: ${Object.entries(j.userFonts).filter(([, u]) => u).map(([r, u]) => `${r} = ${u.name} (${u.file})`).join("; ")} (copie os arquivos para assets/fonts e declare @font-face)` : ""}
 - Gancho: ${j.hook?.name || "—"} · Legendas: ${j.captions?.name || "—"}
 - Elementos: ${list(j.elements)}
 - Motion: ${list(j.motion)}

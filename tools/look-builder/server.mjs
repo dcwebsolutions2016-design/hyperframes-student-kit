@@ -50,6 +50,32 @@ function ldsCatalog() {
   } catch (e) { return { available: false, error: String(e.message || e) }; }
 }
 
+// The user's own font library (any folder tree of .ttf/.otf/.woff/.woff2). Indexed lazily on first request.
+// Override with USER_FONTS=<folder>. Default: the Documents "Fontes  em geral" library (note the double space).
+const USER_FONTS_DIR = [process.env.USER_FONTS, "D:\\Users\\carlo\\Documents\\Fontes  em geral", join(homedir(), "Documents", "Fontes  em geral"), join(homedir(), "FontBase")].filter(Boolean).find((d) => { try { return existsSync(d) && statSync(d).isDirectory(); } catch { return false; } }) || null;
+let FONT_INDEX = null;
+function fontIndex() {
+  if (FONT_INDEX) return FONT_INDEX;
+  const items = [];
+  if (USER_FONTS_DIR) {
+    let files = [];
+    try { files = readdirSync(USER_FONTS_DIR, { recursive: true, withFileTypes: true }); } catch {}
+    for (const e of files) {
+      if (!e.isFile() || !/\.(ttf|otf|woff2?)$/i.test(e.name)) continue;
+      const dir = e.parentPath || e.path || USER_FONTS_DIR;
+      const file = join(dir, e.name);
+      const base = e.name.replace(/\.[^.]+$/, "");
+      const m = /^(.*?)[-_ ]?(thin|extralight|ultralight|light|regular|book|medium|semibold|demibold|bold|extrabold|ultrabold|black|heavy|italic|oblique|condensed|expanded|wide|outline|shadow|rough|inline|demo|free)([-_ ]?(italic|oblique))?$/i.exec(base);
+      const family = (m ? m[1] : base).replace(/[-_]+/g, " ").trim() || base;
+      const style = m ? base.slice(m[1].length).replace(/^[-_ ]+/, "") : "Regular";
+      items.push({ id: items.length, name: base, family, style, folder: relative(USER_FONTS_DIR, dir).split(sep).join("/"), file, ext: extname(e.name).toLowerCase() });
+    }
+  }
+  FONT_INDEX = items;
+  return items;
+}
+const FONT_MIME = { ".ttf": "font/ttf", ".otf": "font/otf", ".woff": "font/woff", ".woff2": "font/woff2" };
+
 const json = (res, code, obj) => { res.writeHead(code, { "content-type": MIME[".json"], "cache-control": "no-store" }); res.end(JSON.stringify(obj)); };
 const notFound = (res, msg = "not found") => json(res, 404, { error: msg });
 const isUnder = (p, dir) => { const r = relative(dir, p); return r && !r.startsWith("..") && !isAbsolute(r); };
@@ -222,6 +248,24 @@ const server = createServer(async (req, res) => {
       return existsSync(file) ? streamFile(req, res, file, { "cache-control": "no-store" }) : notFound(res);
     }
     if (p === "/api/testlist") { const slug = url.searchParams.get("project"); return json(res, 200, { images: slugOk(slug) ? listSnapshots(join(root, "video-projects", slug)).map((x) => ({ ...x, url: `/api/testimg?project=${encodeURIComponent(slug)}&f=${encodeURIComponent(x.file)}&v=${Math.round(x.mtime)}` })) : [] }); }
+    if (p === "/api/userfonts") {
+      const idx = fontIndex();
+      const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+      const limit = Math.min(300, Number(url.searchParams.get("limit")) || 60), offset = Number(url.searchParams.get("offset")) || 0;
+      const hit = q ? idx.filter((f) => f.name.toLowerCase().includes(q) || f.folder.toLowerCase().includes(q)) : idx;
+      // one entry per family (its first style) unless the search is specific
+      const seen = new Set(); const fams = [];
+      for (const f of hit) { const k = f.family.toLowerCase() + "|" + f.folder; if (seen.has(k) && !q) continue; seen.add(k); fams.push(f); }
+      return json(res, 200, { dir: USER_FONTS_DIR, total: idx.length, families: fams.length, items: fams.slice(offset, offset + limit).map(({ file, ...r }) => r) });
+    }
+    if (p.startsWith("/userfont/")) {
+      const f = fontIndex()[Number(p.slice(10))];
+      if (!f || !existsSync(f.file)) return notFound(res, "font");
+      const st = statSync(f.file);
+      res.writeHead(200, { "content-type": FONT_MIME[f.ext] || "application/octet-stream", "content-length": st.size, "cache-control": "public, max-age=604800", "access-control-allow-origin": "*" });
+      return createReadStream(f.file).pipe(res);
+    }
+    if (p === "/api/userfont-file") { const f = fontIndex()[Number(url.searchParams.get("id"))]; return f ? json(res, 200, { file: f.file, name: f.name }) : notFound(res, "font"); }
     if (p === "/api/preset-images") {
       const d = join(here, "assets", "presets");
       const files = existsSync(d) ? readdirSync(d).filter((f) => /\.(png|jpe?g|webp)$/i.test(f)) : [];

@@ -105,3 +105,30 @@ No passo 1, "Começo rápido" mostra cada preset como um card com uma miniatura 
 fontes daquele look. Se quiser ilustrações geradas (por exemplo no ChatGPT), siga
 `assets/presets/PROMPT-CHATGPT.md`: salve `celular.png`, `editorial.png`, … em `assets/presets/` e a interface passa
 a usá-las no lugar da miniatura desenhada.
+
+## Catálogos de efeitos
+
+- `looks.mjs`: as opções derivadas das skills Oney e do style-library.
+- `looks.zee.mjs`: os efeitos do reel da Zee analisado frame a frame (rótulos amarelos no topo, cards de citação,
+  prompt da IA digitando, shrink frame com coluna de thumbs, celular subindo com ✓, sticker e contorno brilhante na
+  pessoa, celular atrás da pessoa, legendas manuscritas com palavra-chave amarela, nota com círculo rabiscado).
+  Preset "Efeitos Zee".
+- `looks.castilho.mjs`: os 35 efeitos do artigo da Castilho IA. Os 5 com comando completo (soco P&B, modo cinema,
+  prompt digitando, lista que se marca, cortina de cor) seguem o texto; os outros 30 são aproximações da descrição.
+  Preset "35 efeitos".
+- Efeitos com "(matte)" no nome precisam do recorte da pessoa na edição real (as skills `video-colagem-oney` e
+  `vsl` têm os scripts); o preview mostra a ideia.
+- Nos passos Elementos e Motion há filtro por família (Oney, Zee, 35 efeitos, style-library) e busca por texto.
+- Um elemento pode trazer a própria animação (`anim(tl, el, cam)`); alguns também movem a câmera (`camera: true`).
+
+## Fontes da sua pasta
+
+O servidor indexa uma biblioteca de fontes (.ttf/.otf/.woff/.woff2) e o passo **Fontes** ganha a seção
+"Minha pasta de fontes": escolha o papel (display, corpo, voz serifada, manuscrita, mono), busque pelo nome ou pela
+pasta e clique "Usar como …". A fonte substitui esse papel no par escolhido, aparece no preview na hora (FontFace API)
+e vai para o `look.json` em `userFonts` com o caminho do arquivo; o "Testar de verdade" copia o arquivo para o
+projeto de teste. Pasta padrão: `D:\Users\carlo\Documents\Fontes  em geral` (ou `~/FontBase`); outra pasta:
+
+```bash
+USER_FONTS="C:\caminho\da\pasta" node tools/look-builder/server.mjs
+```
