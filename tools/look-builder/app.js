@@ -2,6 +2,20 @@
 import { SKILLS, COLOURS, FONTS, HOOKS, CAPTIONS, ELEMENTS, MOTIONS, PRESETS, CONFLICTS, ldsCaption } from "./looks.mjs";
 import "./looks.zee.mjs";      // effects from the zeemagede reel (frame-by-frame analysis)
 import "./looks.castilho.mjs"; // the 35 effects from castilhoia.com
+import "./looks.ajene.mjs";    // our versions of the editing.ajenepinnock.com templates
+import "./looks.tenfold.mjs";  // the three Ten Fold looks
+import { installBrandNat } from "./looks.brandnat.mjs"; // Brand Nat Style Pack codes, data read by the server
+
+// Brand Nat pack (105 codes) — options are added at runtime when the server finds the pack.
+const BN = { available: false, finishes: [], dir: null };
+async function loadBrandNat() {
+  try {
+    const r = await fetch("/api/brandnat").then((x) => x.json());
+    if (!r.available) return;
+    BN.available = true; BN.dir = r.dir; BN.finishes = installBrandNat(r);
+    renderStep(); rebuildMain();
+  } catch {}
+}
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -18,7 +32,7 @@ async function loadLds() {
 }
 
 // ------------------------------------------------------------------ state
-const L = { preset: null, skill: null, colours: null, fonts: null, userFonts: {}, hook: null, captions: null, ldsEntrada: null, elements: [], motion: [], extras: [], notes: "" };
+const L = { preset: null, skill: null, colours: null, fonts: null, userFonts: {}, hook: null, captions: null, ldsEntrada: null, elements: [], motion: [], finishes: [], extras: [], notes: "" };
 const UI = {
   step: 0, clip: null, clipProject: null, W: 1080, H: 1920, landscape: false, headTop: 620, capTop: 1150, poster: "",
   text: { hook1: "Larguei meu emprego?", hook2: "a parte que ninguém conta", words: "isso era o sonho de verdade e ninguém fala".split(" "), keyword: "sonho", note: "eu quase desisti aqui", comment: "quero esse estilo! como faz?", user: "seu_usuario" },
@@ -87,6 +101,7 @@ function applyLook(j) {
   L.colours = id(j.colours); L.fonts = id(j.fonts); L.hook = id(j.hook); L.captions = id(j.captions);
   L.ldsEntrada = j.ldsEntrada || (j.captions && j.captions.lds && j.captions.lds.entradaId) || null;
   L.userFonts = j.userFonts || (j.fonts && j.fonts.custom) || {};
+  L.finishes = (j.brandNat && j.brandNat.finishes) || j.finishes || [];
   L.elements = (j.elements || []).map(id).filter(Boolean); L.motion = (j.motion || []).map(id).filter(Boolean);
   L.extras = j.extras || []; L.notes = j.notes || "";
   if (j.framing) { UI.pendingFraming = j.framing; }
@@ -109,7 +124,7 @@ function syncTextInputs() {
   const w = $("#wordsIn"); if (w) w.value = (UI.text.words || []).join(" ");
 }
 function resetAll() {
-  Object.assign(L, { preset: null, skill: null, colours: null, fonts: null, userFonts: {}, hook: null, captions: null, ldsEntrada: null, elements: [], motion: [], extras: [], notes: "" });
+  Object.assign(L, { preset: null, skill: null, colours: null, fonts: null, userFonts: {}, hook: null, captions: null, ldsEntrada: null, elements: [], motion: [], finishes: [], extras: [], notes: "" });
   try { if (UI.clip) localStorage.removeItem(LS + UI.clip); } catch {}
   UI.step = 0; renderStep(); rebuildMain(); toast("Look limpo.");
 }
@@ -392,7 +407,7 @@ function renderStep() {
   }
   if (st.id === "elements" || st.id === "motion") {
     UI.flt = UI.flt || { q: "", fam: "all" };
-    const fams = [["all", "Todos"], ["oney", "Oney"], ["zee-effects", "Zee"], ["castilho-35", "35 efeitos"], ["lib", "style-library"]];
+    const fams = [["all", "Todos"], ["oney", "Oney"], ["zee-effects", "Zee"], ["castilho-35", "35 efeitos"], ["lib", "style-library"], ["ajene-templates", "Templates"], ["tenfold", "Ten Fold"], ...(BN.available ? [["brand-nat", "Brand Nat"]] : [])];
     $("#quick").innerHTML = `<span class="lbl">Mostrar:</span>` + fams.map(([k, t]) => `<button class="${UI.flt.fam === k ? "on" : ""}" data-fam="${k}">${t}</button>`).join("") + `<input id="fltSearch" placeholder="buscar… (ex.: celular, carimbo, zoom)" value="${esc(UI.flt.q)}" spellcheck="false">`;
     $$("#quick button[data-fam]").forEach((b) => (b.onclick = () => { UI.flt.fam = b.dataset.fam; renderStep(); }));
     const si = $("#fltSearch"); si.oninput = () => { clearTimeout(si._t); si._t = setTimeout(() => { UI.flt.q = si.value.trim(); const pos = si.selectionStart; renderStep(); const n = $("#fltSearch"); if (n) { n.focus(); n.setSelectionRange(pos, pos); } }, 220); };
@@ -437,7 +452,8 @@ function playCaptions(tl, root, caps, start) {
   const c = $(".caps", root); if (!c) return;
   const dt = caps.mode === "phrase" ? 1.2 : caps.mode === "lds" ? 1.3 : 0.34;
   cycleWords(tl, c, start, dt);
-  if (caps.mode === "phrase") $$(".w", c).forEach((x, i) => tl.from(x, { y: 16, opacity: 0, duration: 0.3 }, start + i * dt));
+  if (caps.capAnim) caps.capAnim(tl, c, start, dt);
+  else if (caps.mode === "phrase") $$(".w", c).forEach((x, i) => tl.from(x, { y: 16, opacity: 0, duration: 0.3 }, start + i * dt));
   if (caps.mode === "lds") $$(".w", c).forEach((x, i) => tl.from($$(".ldw", x), { y: 14, opacity: 0, scale: 0.92, duration: 0.22, stagger: 0.18, ease: "back.out(1.6)" }, start + i * dt));
 }
 function fillCard(step, o, el) {
@@ -555,8 +571,20 @@ function lookJson() {
     elements: L.elements.map((id) => ({ id, name: name(ELEMENTS, id) })),
     motion: L.motion.map((id) => ({ id, name: name(MOTIONS, id) })),
     sampleText: UI.text, extras: L.extras, notes: L.notes, conflicts: conflicts(skill),
+    brandNat: brandNatJson(),
   };
 }
+// Brand Nat codes picked anywhere (hook, captions, elements, motion) plus the finish picks (S/G)
+function brandNatCodes() {
+  const codes = [];
+  const h = byId(HOOKS, L.hook); if (h && h.code) codes.push(h.code);
+  const c = capById(L.captions); if (c && c.code) codes.push(c.code);
+  L.elements.forEach((id) => { const e = byId(ELEMENTS, id); if (e && e.code) codes.push(e.code); });
+  L.motion.forEach((id) => { const m = byId(MOTIONS, id); if (m && m.code) codes.push(m.code); });
+  (L.finishes || []).forEach((code) => codes.push(code));
+  return [...new Set(codes)];
+}
+function brandNatJson() { const codes = brandNatCodes(); return codes.length ? { codes, finishes: L.finishes || [], guide: BN.dir, command: `Edit <video> with ${codes.join(" ")}` } : undefined; }
 function promptText() {
   const j = lookJson(); const slug = $("#slug").value.trim() || "meu-video";
   const cmd = j.skillCommand || "/edit-video";
@@ -567,7 +595,7 @@ Siga video-projects/${slug}/look.json (gerado pelo Look builder) em todas as dec
 - Gancho: ${j.hook?.name || "—"} · Legendas: ${j.captions?.name || "—"}
 - Elementos: ${list(j.elements)}
 - Motion: ${list(j.motion)}
-- Topo da cabeça ≈ ${UI.headTop}px, legenda em ${UI.capTop}px (${j.orientation}).${j.captions && j.captions.lds ? `\n- LEGENDAS no EffectCraft (skill legenda-dinamica-studio, /legenda): pronto "${j.captions.lds.prontoName}" (${j.captions.lds.modelo}), entrada ${j.captions.lds.entradaName || j.captions.lds.entradaPadrao}, saída ${j.captions.lds.saida}. Deixe a faixa da legenda livre na composição HyperFrames e entregue words.json para o LDS.` : ""}${j.extras.length ? `\n- Variações pedidas: ${j.extras.map((e) => `${e.base} → ${e.ask}`).join("; ")}` : ""}${j.notes ? `\n- Notas: ${j.notes}` : ""}${j.conflicts.length ? `\n- Atenção, o look conflita com a skill: ${j.conflicts.join(" ")} Resolva com o aluno antes de montar.` : ""}
+- Topo da cabeça ≈ ${UI.headTop}px, legenda em ${UI.capTop}px (${j.orientation}).${j.captions && j.captions.lds ? `\n- LEGENDAS no EffectCraft (skill legenda-dinamica-studio, /legenda): pronto "${j.captions.lds.prontoName}" (${j.captions.lds.modelo}), entrada ${j.captions.lds.entradaName || j.captions.lds.entradaPadrao}, saída ${j.captions.lds.saida}. Deixe a faixa da legenda livre na composição HyperFrames e entregue words.json para o LDS.` : ""}${j.brandNat ? `\n- Códigos Brand Nat escolhidos (skill brand-nat-styles): ${j.brandNat.codes.join(" ")}. Se for usar essa skill: "Edit <vídeo> with ${j.brandNat.codes.join(" ")}".` : ""}${j.extras.length ? `\n- Variações pedidas: ${j.extras.map((e) => `${e.base} → ${e.ask}`).join("; ")}` : ""}${j.notes ? `\n- Notas: ${j.notes}` : ""}${j.conflicts.length ? `\n- Atenção, o look conflita com a skill: ${j.conflicts.join(" ")} Resolva com o aluno antes de montar.` : ""}
 Mostre o mapa de beats antes de montar e não publique nada.`;
 }
 function renderReview(grid) {
@@ -586,10 +614,12 @@ function renderReview(grid) {
       <h3 style="margin-top:14px">Conflitos com o DESIGN.md da skill</h3>
       ${cf.length ? `<ul>${cf.map((m) => `<li class="warn">⚠ ${esc(m)}</li>`).join("")}</ul>` : `<p class="ok">✓ Nenhum conflito. O look cabe nessa skill.</p>`}
     </div>
+    ${BN.available ? `<div class="box"><h3>Brand Nat · som e acabamento</h3><p style="color:var(--dim);margin:0 0 10px">Códigos S (som) e G (cor/acabamento) do pacote. Entram só na linha de códigos.</p><div class="skillpick finishes">${BN.finishes.map((f) => `<button class="${(L.finishes || []).includes(f.code) ? "on" : ""}" data-fin="${f.code}" title="${esc(f.what)}">${esc(f.code)} · ${esc(f.name)}</button>`).join("")}</div>${j.brandNat ? `<p style="margin:12px 0 0;color:var(--fg)"><b>Códigos:</b> <code>${esc(j.brandNat.codes.join(" "))}</code></p>` : ""}</div>` : ""}
     <div class="box"><h3>Notas para o Claude</h3><textarea id="notes" placeholder="Ex.: a cor do canal é #ff6600, use no acento; não cubra o quadro atrás de mim; prints estão em Pictures/Screenshots.">${esc(L.notes)}</textarea></div>
     <div class="box"><h3>Prompt pronto</h3><pre id="promptPre">${esc(promptText())}</pre></div>
   </div>`;
-  $$(".skillpick button", grid).forEach((b) => (b.onclick = () => { L.skill = b.dataset.s === L.skill ? null : b.dataset.s; renderStep(); }));
+  $$(".skillpick button[data-s]", grid).forEach((b) => (b.onclick = () => { L.skill = b.dataset.s === L.skill ? null : b.dataset.s; renderStep(); }));
+  $$(".finishes button", grid).forEach((b) => (b.onclick = () => { const c = b.dataset.fin; const a = L.finishes || (L.finishes = []); const i = a.indexOf(c); i >= 0 ? a.splice(i, 1) : a.push(c); autosave(); renderStep(); }));
   $$("[data-x]", grid).forEach((a) => (a.onclick = (e) => { e.preventDefault(); L.extras.splice(Number(a.dataset.x), 1); renderStep(); }));
   $("#notes").oninput = (e) => { L.notes = e.target.value; autosave(); $("#promptPre").textContent = promptText(); };
 }
@@ -600,6 +630,10 @@ function applyPreset(id) {
   L.preset = id; L.skill = p.skill;
   L.colours = p.picks.colours || null; L.fonts = p.picks.fonts || null; L.hook = p.picks.hook || null; L.captions = p.picks.captions || null;
   L.elements = [...(p.picks.elements || [])]; L.motion = [...(p.picks.motion || [])];
+  // picks that depend on an optional catalogue (Brand Nat codes) fall back to the nearest kit option
+  if (L.captions && !capById(L.captions)) L.captions = "one-word-lower";
+  if (L.hook && !byId(HOOKS, L.hook)) L.hook = "big-caps";
+  L.elements = L.elements.filter((id) => byId(ELEMENTS, id)); L.motion = L.motion.filter((id) => byId(MOTIONS, id));
   toast(p.skill ? `Preset ${p.name}: ${SKILLS[p.skill].name}. Você ainda pode mudar tudo.` : "Começando do zero.");
   renderStep(); rebuildMain();
 }
@@ -680,6 +714,6 @@ let toastT; function toast(msg) { const t = $("#toast"); t.textContent = msg; t.
 function esc(s) { return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
 // boot
-syncSliders(); layoutStage(); renderStep(); rebuildMain(); loadLds(); loadPresetImages(); loadClips();
+syncSliders(); layoutStage(); renderStep(); rebuildMain(); loadLds(); loadBrandNat(); loadPresetImages(); loadClips();
 
 window.__lb = { L, UI, rebuildMain, renderStep, lookJson, fillPresetCards };

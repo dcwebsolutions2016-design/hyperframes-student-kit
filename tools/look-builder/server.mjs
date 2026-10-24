@@ -76,6 +76,18 @@ function fontIndex() {
 }
 const FONT_MIME = { ".ttf": "font/ttf", ".otf": "font/otf", ".woff": "font/woff", ".woff2": "font/woff2" };
 
+// Brand Nat Style Pack (the user's downloaded guide). We read its styles.js as DATA (never executed): the
+// `window.STYLES = {...}` payload is stripped to JSON. Override the location with BRANDNAT_GUIDE=<guide folder>.
+const BRANDNAT_DIR = [process.env.BRANDNAT_GUIDE, join(homedir(), "Desktop", "Videos Gringo com painel", "Brand Nat Style Pack", "brand-nat-styles", "guide"), join(homedir(), ".claude", "skills", "brand-nat-styles", "guide")].filter(Boolean).find((d) => existsSync(join(d, "styles.js"))) || null;
+function brandNat() {
+  if (!BRANDNAT_DIR) return { available: false };
+  try {
+    const raw = readFileSync(join(BRANDNAT_DIR, "styles.js"), "utf8").replace(/^\s*window\.STYLES\s*=\s*/, "").replace(/;\s*$/, "");
+    const d = JSON.parse(raw);
+    return { available: true, dir: BRANDNAT_DIR, updated: d.updated || null, cats: (d.cats || []).map((c) => ({ id: c.id, name: c.name, blurb: c.blurb, items: (c.items || []).map((i) => ({ code: i.code, name: i.name, what: i.what })) })) };
+  } catch (e) { return { available: false, error: String(e.message || e) }; }
+}
+
 const json = (res, code, obj) => { res.writeHead(code, { "content-type": MIME[".json"], "cache-control": "no-store" }); res.end(JSON.stringify(obj)); };
 const notFound = (res, msg = "not found") => json(res, 404, { error: msg });
 const isUnder = (p, dir) => { const r = relative(dir, p); return r && !r.startsWith("..") && !isAbsolute(r); };
@@ -271,6 +283,7 @@ const server = createServer(async (req, res) => {
       const files = existsSync(d) ? readdirSync(d).filter((f) => /\.(png|jpe?g|webp)$/i.test(f)) : [];
       return json(res, 200, { images: Object.fromEntries(files.map((f) => [f.replace(/\.[^.]+$/, ""), `/assets/presets/${f}`])) });
     }
+    if (p === "/api/brandnat") return json(res, 200, brandNat());
     if (p === "/api/lds") return json(res, 200, ldsCatalog());
     if (p.startsWith("/lds/") && LDS_DIR) {
       const f = resolve(LDS_DIR, p.slice(5));

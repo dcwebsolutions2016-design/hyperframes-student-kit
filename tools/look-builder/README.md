@@ -132,3 +132,18 @@ projeto de teste. Pasta padrão: `D:\Users\carlo\Documents\Fontes  em geral` (ou
 ```bash
 USER_FONTS="C:\caminho\da\pasta" node tools/look-builder/server.mjs
 ```
+
+## Mais catálogos (referências dos "perfis gringos")
+
+- `looks.brandnat.mjs` + `/api/brandnat`: lê o `styles.js` do **Brand Nat Style Pack** (pasta
+  `Desktop\Videos Gringo com painel\…\guide`, ou `BRANDNAT_GUIDE=<pasta>`) como dados, nunca executa o arquivo.
+  Os 105 códigos (H, C, L, P, V, B, X, M, S, G) viram opções: ganchos e legendas com preview próprio, os demais
+  mapeados para um renderizador do kit ou mostrados como card de posicionamento. S e G se escolhem na Revisão.
+  O `look.json` grava `brandNat.codes` e o prompt traz a linha `Edit <vídeo> with H10 C9 …` para a skill deles.
+- `looks.ajene.mjs`: **nossas versões** dos 20 templates (+13 anunciados) de editing.ajenepinnock.com, só a partir da
+  descrição pública e do reel do autor: painel explicativo, painel de vidro, split, tier list, grid de recortes, cluster
+  de imagens, captions encaixadas, se/então, isso vs aquilo, lista rápida, top 5, clone vs clone, canvas pontilhado com
+  leque de celulares, Depth UI com toast "Inscrito", etiqueta de preço. Presets `tpl-*`, paleta "Laranja Ajene".
+- `looks.tenfold.mjs`: os três looks do /video-edit da Ten Fold (Bold, Cool girl, Cool dude) como presets `tf-*`.
+- Skill `/look-builder` (`.claude/skills/look-builder/`): chama a edição a partir do `look.json` ou de um template id,
+  como os pacotes gringos fazem com "/". Ela roteia para a skill do kit que o look aponta.

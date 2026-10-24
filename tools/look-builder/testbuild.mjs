@@ -10,6 +10,8 @@ import { spawn, execFileSync } from "node:child_process";
 import { COLOURS, FONTS, HOOKS, CAPTIONS, ELEMENTS, MOTIONS, ldsCaption } from "./looks.mjs";
 import "./looks.zee.mjs";
 import "./looks.castilho.mjs";
+import "./looks.ajene.mjs";
+import "./looks.tenfold.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "..", "..");
