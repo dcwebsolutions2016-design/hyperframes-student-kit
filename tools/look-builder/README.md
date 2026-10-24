@@ -43,6 +43,17 @@ palavra por palavra) nas suas cores. O `look.json` grava `captions.engine = "leg
 modelo, entrada e saída, e o prompt pede a legenda via skill `/legenda` no EffectCraft enquanto o resto do look
 é montado no HyperFrames. Sem a pasta, o passo funciona só com as legendas HTML do kit.
 
+## Testar de verdade
+
+O preview do wizard é HTML/GSAP no navegador. O botão **▶ Testar de verdade** (rodapé) monta uma composição
+HyperFrames real a partir do look atual em `video-projects/<slug>/look-test/` (um trecho de 8 s do clipe a partir
+do tempo atual do player, copiado sem reencodar, as fontes das skills e um `index.html` com uma timeline GSAP
+pausada registrada em `window.__timelines`) e roda `hyperframes snapshot` nos instantes do gancho, das legendas e
+de cada entrada de elemento. Os PNGs aparecem numa galeria no próprio Look builder, com link para abrir em tamanho
+real. Leva cerca de um minuto no primeiro uso (o HyperFrames sobe o navegador de render). O `look-test/` pode ser
+apagado a qualquer momento; o `index.html` gerado também serve de ponto de partida para a skill, pois usa os
+mesmos renderizadores de `looks.mjs` (`testbuild.mjs` serializa as funções `anim` para dentro da página).
+
 ## Atalhos e rascunho
 
 ← → mudam de passo, 1–9 escolhem o card, espaço dá play/pause, Esc fecha "Mais como essa". O rascunho é salvo
@@ -69,10 +80,10 @@ junto com o seu vídeo.
 
 ## Estender
 
-- `looks.js` é o catálogo. Para uma opção nova, adicione um objeto com `id`, `name`, `desc`, `skills`
+- `looks.mjs` é o catálogo. Para uma opção nova, adicione um objeto com `id`, `name`, `desc`, `skills`
   (onde ela é nativa) e um `render(S)` que escreve HTML em pixels de 1080 (ou 1920) de largura; `S.v` são as
   cores, `S.font` as fontes, `S.headTop`/`S.capTop` o enquadramento, `S.text` o texto de exemplo.
-- `CONFLICTS` em `looks.js` traduz os "What NOT to do" de cada DESIGN.md. Se mudar uma skill, atualize ali.
+- `CONFLICTS` em `looks.mjs` traduz os "What NOT to do" de cada DESIGN.md. Se mudar uma skill, atualize ali.
 - Fontes: o servidor serve `/fonts/<arquivo>` procurando nas pastas `template/fonts` das skills. Anton, Bebas,
   Fraunces, Archivo e Playfair vêm do Google Fonts (precisa de internet só para esses).
 

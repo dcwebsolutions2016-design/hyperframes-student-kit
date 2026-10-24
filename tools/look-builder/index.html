@@ -78,10 +78,17 @@
     <label class="slug-wrap"><span>video-projects/</span><input id="slug" placeholder="meu-reel" spellcheck="false"></label>
     <button class="btn" id="copyPrompt" title="Copia o prompt pronto para o Claude">Copiar prompt</button>
     <button class="btn" id="save" title="Grava look.json e LOOK.md no projeto">Salvar look.json</button>
+    <button class="btn test" id="testReal" title="Monta uma composição HyperFrames com este look e captura frames reais (≈1 min)">▶ Testar de verdade</button>
   </div>
   <button class="btn primary" id="next">Próximo →</button>
 </footer>
 <div class="toast" id="toast"></div>
+
+<dialog id="testDlg" class="test-dlg">
+  <header><div><b>Testar de verdade</b><span id="testSub">Composição HyperFrames real, frames capturados com <code>hyperframes snapshot</code>.</span></div><button class="btn sm" id="testClose">Fechar</button></header>
+  <div class="test-body" id="testBody"><p class="test-wait">Montando o projeto de teste e capturando frames… no seu PC pode levar um minuto.</p></div>
+  <footer><span class="hint" id="testPath"></span><span class="hint">Trecho do clipe a partir do tempo atual do player. Projeto de teste em <code>video-projects/&lt;slug&gt;/look-test/</code>.</span></footer>
+</dialog>
 
 <script src="/vendor/gsap.min.js"></script>
 <script type="module" src="app.js"></script>

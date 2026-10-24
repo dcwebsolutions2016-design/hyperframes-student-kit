@@ -1,0 +1,170 @@
+// "Testar de verdade": turn a look (the same JSON the wizard saves) into a real HyperFrames composition
+// and capture PNG snapshots of it with `npx hyperframes snapshot`. The composition reuses the exact render
+// functions of looks.mjs (server-side, they only build HTML strings) and serialises their GSAP `anim` closures
+// into the page, so what HyperFrames renders is the same markup the wizard previews — now with real fonts,
+// real pixels and the real clip.
+import { mkdirSync, copyFileSync, existsSync, writeFileSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { join, resolve, dirname, extname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { spawn, execFileSync } from "node:child_process";
+import { COLOURS, FONTS, HOOKS, CAPTIONS, ELEMENTS, MOTIONS, ldsCaption } from "./looks.mjs";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const root = resolve(here, "..", "..");
+const FONT_FILES = ["Advercase-Regular.woff2", "Advercase-Bold.woff2", "Inter-SemiBold.ttf", "Inter-Medium.ttf", "Inter-Regular.ttf", "InstrumentSerif-Italic.woff2", "Caveat-Bold.woff2", "Anybody.ttf", "PlusJakartaSans.ttf", "JetBrainsMono.ttf"];
+const FONT_DIRS = ["reel-oney", "reel-editorial-oney", "reel-explicativo-oney", "vsl", "anuncios-oney"].map((s) => join(root, ".claude/skills", s, "template/fonts"));
+const byId = (arr, id) => arr.find((x) => x.id === id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+const FONT_FACES = `
+@font-face{font-family:"Advercase";src:url("assets/fonts/Advercase-Regular.woff2") format("woff2");font-weight:400}
+@font-face{font-family:"Advercase";src:url("assets/fonts/Advercase-Bold.woff2") format("woff2");font-weight:700}
+@font-face{font-family:"EdSans";src:url("assets/fonts/Inter-SemiBold.ttf") format("truetype");font-weight:600}
+@font-face{font-family:"EdSans";src:url("assets/fonts/Inter-Medium.ttf") format("truetype");font-weight:500}
+@font-face{font-family:"Inter";src:url("assets/fonts/Inter-Regular.ttf") format("truetype");font-weight:400}
+@font-face{font-family:"Inter";src:url("assets/fonts/Inter-Medium.ttf") format("truetype");font-weight:500}
+@font-face{font-family:"Inter";src:url("assets/fonts/Inter-SemiBold.ttf") format("truetype");font-weight:600 800}
+@font-face{font-family:"EdSerif";src:url("assets/fonts/InstrumentSerif-Italic.woff2") format("woff2");font-style:italic;font-weight:400}
+@font-face{font-family:"Caveat";src:url("assets/fonts/Caveat-Bold.woff2") format("woff2");font-weight:700}
+@font-face{font-family:"Anybody";src:url("assets/fonts/Anybody.ttf") format("truetype");font-weight:100 900;font-stretch:50% 150%}
+@font-face{font-family:"Plus Jakarta Sans";src:url("assets/fonts/PlusJakartaSans.ttf") format("truetype");font-weight:200 800}
+@font-face{font-family:"JetBrains Mono";src:url("assets/fonts/JetBrainsMono.ttf") format("truetype");font-weight:100 800}`;
+
+// Rebuild the renderer state (what the wizard calls S()) from a saved look.
+export function stateFromLook(look) {
+  const c = byId(COLOURS, look.colours?.id) || COLOURS[0];
+  const f = byId(FONTS, look.fonts?.id) || FONTS[0];
+  const W = look.canvas?.width || 1080, H = look.canvas?.height || 1920;
+  const text = { hook1: "Larguei meu emprego?", hook2: "a parte que ninguém conta", words: ["isso", "era", "o", "sonho"], keyword: "sonho", note: "eu quase desisti aqui", comment: "quero esse estilo!", user: "seu_usuario", ...(look.sampleText || {}) };
+  return { v: { ...c.vars, ...(look.colours || {}) }, font: f, text, W, H, landscape: W > H, headTop: look.framing?.headTop ?? 620, capTop: look.framing?.capTop ?? 1150 };
+}
+
+function captionOf(look) {
+  const id = look.captions?.id; if (!id) return null;
+  if (id.startsWith("lds:") && look.captions.lds) return ldsCaption({ id: look.captions.lds.pronto, name: look.captions.lds.prontoName, modelo: look.captions.lds.modelo, entrada: look.captions.lds.entradaPadrao, saida: look.captions.lds.saida });
+  return byId(CAPTIONS, id) || null;
+}
+
+// Timeline plan: same timing as the wizard's main stage.
+export function planFromLook(look, dur) {
+  const hook = byId(HOOKS, look.hook?.id), caps = captionOf(look);
+  const els = (look.elements || []).map((e) => byId(ELEMENTS, e.id)).filter(Boolean);
+  const motions = (look.motion || []).map((m) => byId(MOTIONS, m.id)).filter(Boolean);
+  const objM = motions.filter((m) => !m.camera), camM = motions.filter((m) => m.camera);
+  const elBeats = els.map((e, i) => ({ el: e, t0: 2.9 + i * 1.5, motion: objM[i % Math.max(1, objM.length)] || byId(MOTIONS, "blur-rise") }));
+  const capDt = caps ? (caps.mode === "lds" ? 1.3 : caps.mode === "phrase" ? 1.2 : 0.34) : 0;
+  return { hook, caps, capDt, elBeats, camM, dur };
+}
+
+export function compositionHtml(look, S, plan, clipRel, clipDur) {
+  const D = plan.dur;
+  const id = "look-test";
+  const wrap = (inner, start, d, track, extra = "") => inner ? `<div class="clip" data-start="${start}" data-duration="${d.toFixed(2)}" data-track-index="${track}" style="position:absolute;inset:0;pointer-events:none;${extra}">${inner}</div>` : "";
+  let track = 1, body = "";
+  body += wrap(plan.hook && plan.hook.id !== "none" ? plan.hook.render(S) : "", 0, Math.min(D, 3.5), track++);
+  body += wrap(plan.caps ? plan.caps.render(S) : "", 0, D, track++);
+  for (const b of plan.elBeats) body += wrap(b.el.render(S), b.t0 > 0 ? b.t0.toFixed(2) : 0, Math.min(2.9, D - b.t0), track++, `--t0:${b.t0}`);
+  // animation code: closures from looks.mjs serialised verbatim; `cycle` mirrors app.js cycleWords/playCaptions
+  const anims = [];
+  if (plan.hook && plan.hook.id !== "none") anims.push(`{ const h = document.querySelector("#${id} .hook"); if (h) { (${plan.hook.anim.toString()})(tl, h); tl.to(h, { opacity: 0, duration: 0.25 }, 3.2); } }`);
+  if (plan.caps) anims.push(`{ const c = document.querySelector("#${id} .caps"); if (c) { const ws = [...c.querySelectorAll(".w")]; const dt = ${plan.capDt}, start = 0.3;
+    ws.forEach((w, i) => { tl.set(w, { opacity: 1 }, start + i * dt); tl.set(w, { opacity: 0 }, start + (i + 1) * dt); });
+    ${plan.caps.mode === "phrase" ? `ws.forEach((x, i) => tl.from(x, { y: 16, opacity: 0, duration: 0.3 }, start + i * dt));` : ""}
+    ${plan.caps.mode === "lds" ? `ws.forEach((x, i) => tl.from([...x.querySelectorAll(".ldw")], { y: 14, opacity: 0, scale: 0.92, duration: 0.22, stagger: 0.18, ease: "back.out(1.6)" }, start + i * dt));` : ""} } }`);
+  plan.elBeats.forEach((b, i) => anims.push(`{ const e = document.querySelectorAll("#${id} .el")[${i}]; if (e) { const t0 = ${b.t0};
+    const sub = gsap.timeline(); (${b.motion.anim.toString()})(sub, e, cam); tl.add(sub, t0);
+    if (e.querySelector(".num,.bar")) { const t = gsap.timeline(); (${byId(MOTIONS, "count-tick").anim.toString()})(t, e); tl.add(t, t0 + 0.2); }
+    e.querySelectorAll("path").forEach((p) => { const L = p.getTotalLength(); p.style.strokeDasharray = L; tl.fromTo(p, { strokeDashoffset: L }, { strokeDashoffset: 0, duration: 0.45 }, t0 + 0.2); });
+    const li = e.querySelectorAll(".li,.row,.ch"); if (li.length) tl.from(li, { opacity: 0, y: 10, duration: 0.3, stagger: 0.18 }, t0 + 0.1);
+    const strip = e.querySelector(".strip"); if (strip) tl.to(strip, { x: -900, duration: 4, ease: "none" }, t0);
+    tl.to(e, { opacity: 0, duration: 0.25 }, t0 + 2.6); } }`));
+  plan.camM.forEach((m, i) => anims.push(`{ const t = gsap.timeline(); (${m.anim.toString()})(t, null, cam); tl.add(t, ${3 + i * 3}); }`));
+  const google = `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Fraunces:ital,wght@0,300;0,900;1,900&family=Archivo:wght@400;500;700&family=Playfair+Display:wght@700&family=Space+Mono&display=block">`;
+  return `<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>Look test — ${esc(look.project || "look")}</title>
+<script src="assets/gsap.min.js"></script>
+${google}
+<style>
+${FONT_FACES}
+*{box-sizing:border-box}html,body{margin:0;width:${S.W}px;height:${S.H}px;overflow:hidden;background:#000}
+#${id}{position:relative;width:${S.W}px;height:${S.H}px;overflow:hidden;background:#000}
+#cam{position:absolute;inset:0;overflow:hidden;transform-origin:50% 50%}
+#cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.ov{position:absolute}
+</style></head><body>
+<div id="${id}" data-composition-id="${id}" data-start="0" data-duration="${D}" data-width="${S.W}" data-height="${S.H}">
+  <div id="cam"><video data-start="0" data-duration="${Math.min(D, clipDur).toFixed(2)}" data-track-index="0" src="${clipRel}" muted playsinline></video></div>
+  ${body}
+</div>
+<script>
+// Generated by tools/look-builder/testbuild.mjs — one paused timeline, registered synchronously.
+const tl = gsap.timeline({ paused: true });
+const cam = document.getElementById("cam");
+${anims.join("\n")}
+tl.to({}, { duration: 0.01 }, ${D});
+window.__timelines = window.__timelines || {}; window.__timelines["${id}"] = tl;
+</script></body></html>
+`;
+}
+
+function clipDuration(file) {
+  try { return Number(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file]).toString().trim()) || 10; } catch { return 10; }
+}
+
+// Build the test project. Returns { dir, html, times }.
+export function buildTestProject(look, { projectDir, clip, from = 0, dur = 8 }) {
+  const dir = join(projectDir, "look-test");
+  mkdirSync(join(dir, "assets", "fonts"), { recursive: true });
+  const gsap = join(root, "node_modules/gsap/dist/gsap.min.js");
+  if (!existsSync(gsap)) throw new Error("gsap não encontrado: rode npm ci na raiz do kit");
+  copyFileSync(gsap, join(dir, "assets", "gsap.min.js"));
+  for (const f of FONT_FILES) for (const d of FONT_DIRS) { const p = join(d, f); if (existsSync(p)) { copyFileSync(p, join(dir, "assets", "fonts", f)); break; } }
+  // Excerpt of the clip (stream copy, fast) so the test project is self-contained and small.
+  const total = clipDuration(clip);
+  const start = Math.max(0, Math.min(from, Math.max(0, total - dur)));
+  const out = join(dir, "assets", "clip" + (extname(clip).toLowerCase() === ".webm" ? ".webm" : ".mp4"));
+  try { execFileSync("ffmpeg", ["-y", "-v", "error", "-ss", String(start), "-i", clip, "-t", String(dur + 0.5), "-c", "copy", "-movflags", "+faststart", out], { stdio: "ignore" }); }
+  catch { execFileSync("ffmpeg", ["-y", "-v", "error", "-ss", String(start), "-i", clip, "-t", String(dur + 0.5), "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-pix_fmt", "yuv420p", out], { stdio: "ignore" }); }
+  const clipDur = Math.min(dur, clipDuration(out));
+  const S = stateFromLook(look);
+  const plan = planFromLook(look, dur);
+  const html = compositionHtml(look, S, plan, "assets/" + out.split(/[\\/]/).pop(), clipDur);
+  writeFileSync(join(dir, "index.html"), html);
+  writeFileSync(join(dir, "hyperframes.json"), JSON.stringify({ $schema: "https://hyperframes.heygen.com/schema/hyperframes.json", paths: { blocks: "compositions", components: "compositions/components", assets: "assets" } }, null, 2) + "\n");
+  // Frames worth looking at: hook, first captions, each element entrance (+0.5 s), a late frame.
+  const times = [0.9, 1.9, ...plan.elBeats.map((b) => +(b.t0 + 0.6).toFixed(2))];
+  if (!plan.elBeats.length) times.push(4.5, 6.5);
+  return { dir, times: [...new Set(times.filter((t) => t < dur))].sort((a, b) => a - b), start };
+}
+
+// Run `npx hyperframes snapshot` on the test project. Resolves with the PNG file names.
+export function runSnapshot(dir, times, { timeoutMs = 180000 } = {}) {
+  const outDir = join(dir, "snapshots");
+  if (existsSync(outDir)) rmSync(outDir, { recursive: true, force: true });
+  mkdirSync(outDir, { recursive: true });
+  // Call the local CLI entry directly with node: no npx, no shell, no quoting problems with spaces in paths.
+  const bin = join(root, "node_modules", "hyperframes", "package.json");
+  const cli = existsSync(bin) ? join(root, "node_modules", "hyperframes", JSON.parse(readFileSync(bin, "utf8")).bin?.hyperframes || "dist/cli.js") : null;
+  const args = ["snapshot", dir, "--at", times.join(","), "--no-end", "--describe", "false", "-o", outDir, "--timeout", "12000"];
+  return new Promise((ok, fail) => {
+    const child = cli && existsSync(cli)
+      ? spawn(process.execPath, [cli, ...args], { cwd: root, windowsHide: true })
+      : spawn(process.platform === "win32" ? "npx.cmd" : "npx", ["hyperframes", ...args], { cwd: root, shell: process.platform === "win32", windowsHide: true });
+    let log = "";
+    child.stdout.on("data", (d) => (log += d)); child.stderr.on("data", (d) => (log += d));
+    const timer = setTimeout(() => { child.kill(); fail(new Error("snapshot demorou demais (>" + timeoutMs / 1000 + " s)\n" + log.slice(-800))); }, timeoutMs);
+    child.on("error", (e) => { clearTimeout(timer); fail(e); });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      const files = existsSync(outDir) ? readdirSync(outDir).filter((f) => /^frame-.*\.png$/i.test(f)).sort() : [];
+      if (!files.length) return fail(new Error(`snapshot saiu com código ${code} e sem imagens\n` + log.slice(-1200)));
+      ok({ files, log: log.slice(-2000), code });
+    });
+  });
+}
+
+export function listSnapshots(projectDir) {
+  const d = join(projectDir, "look-test", "snapshots");
+  if (!existsSync(d)) return [];
+  return readdirSync(d).filter((f) => /^frame-.*\.png$/i.test(f)).sort().map((f) => ({ file: f, mtime: statSync(join(d, f)).mtimeMs }));
+}

@@ -8,6 +8,7 @@ import { createReadStream, existsSync, readdirSync, statSync, readFileSync, writ
 import { resolve, join, extname, basename, dirname, relative, isAbsolute, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
+import { buildTestProject, runSnapshot, listSnapshots } from "./testbuild.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "..", "..");
@@ -195,6 +196,32 @@ const server = createServer(async (req, res) => {
       writeFileSync(join(dir, "LOOK.md"), lookMarkdown(look));
       return json(res, 200, { ok: true, file: relative(root, f).split(sep).join("/"), md: relative(root, join(dir, "LOOK.md")).split(sep).join("/") });
     }
+    // "Testar de verdade": build a HyperFrames composition from the look and snapshot it.
+    if (p === "/api/test" && req.method === "POST") {
+      const body = JSON.parse(await readBody(req) || "{}");
+      const slug = body.project;
+      if (!slugOk(slug)) return json(res, 400, { error: "Slug inválido." });
+      const clip = allowedClip(body.look && body.look.clip);
+      if (!clip) return json(res, 400, { error: "Clipe não encontrado. Escolha um clipe antes de testar." });
+      const projectDir = join(root, "video-projects", slug);
+      mkdirSync(projectDir, { recursive: true });
+      const t0 = Date.now();
+      let built;
+      try { built = buildTestProject({ ...body.look, project: slug }, { projectDir, clip, from: Number(body.from) || 0, dur: Math.min(12, Math.max(5, Number(body.dur) || 8)) }); }
+      catch (e) { return json(res, 500, { error: "Falha ao montar o projeto de teste: " + (e.message || e) }); }
+      try {
+        const r = await runSnapshot(built.dir, built.times);
+        return json(res, 200, { ok: true, dir: relative(root, built.dir).split(sep).join("/"), times: built.times, start: built.start, ms: Date.now() - t0,
+          images: r.files.map((f) => ({ file: f, url: `/api/testimg?project=${encodeURIComponent(slug)}&f=${encodeURIComponent(f)}&v=${Date.now()}` })), log: r.log });
+      } catch (e) { return json(res, 500, { error: String(e.message || e), dir: relative(root, built.dir).split(sep).join("/") }); }
+    }
+    if (p === "/api/testimg") {
+      const slug = url.searchParams.get("project"), f = basename(url.searchParams.get("f") || "");
+      if (!slugOk(slug) || !/\.(png|jpe?g)$/i.test(f)) return notFound(res);
+      const file = join(root, "video-projects", slug, "look-test", "snapshots", f);
+      return existsSync(file) ? streamFile(req, res, file, { "cache-control": "no-store" }) : notFound(res);
+    }
+    if (p === "/api/testlist") { const slug = url.searchParams.get("project"); return json(res, 200, { images: slugOk(slug) ? listSnapshots(join(root, "video-projects", slug)).map((x) => ({ ...x, url: `/api/testimg?project=${encodeURIComponent(slug)}&f=${encodeURIComponent(x.file)}&v=${Math.round(x.mtime)}` })) : [] }); }
     if (p === "/api/lds") return json(res, 200, ldsCatalog());
     if (p.startsWith("/lds/") && LDS_DIR) {
       const f = resolve(LDS_DIR, p.slice(5));

@@ -1,5 +1,5 @@
 // Look builder — app. Seven steps; every card renders the chosen look over a frame of the user's own clip.
-import { SKILLS, COLOURS, FONTS, HOOKS, CAPTIONS, ELEMENTS, MOTIONS, PRESETS, CONFLICTS, ldsCaption } from "./looks.js";
+import { SKILLS, COLOURS, FONTS, HOOKS, CAPTIONS, ELEMENTS, MOTIONS, PRESETS, CONFLICTS, ldsCaption } from "./looks.mjs";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -47,12 +47,16 @@ async function loadClips() {
   const r = await fetch("/api/clips").then((x) => x.json());
   const sel = $("#clipSelect");
   sel.innerHTML = `<option value="">— escolha um clipe —</option>` + r.clips.map((c) => `<option value="${esc(c.path)}" data-project="${esc(c.project || "")}">${esc(c.project ? c.project + " / " : "")}${esc(c.name)} · ${(c.size / 1e6).toFixed(0)} MB</option>`).join("");
-  const q = new URLSearchParams(location.search).get("clip") || r.startClip || (r.clips[0] && r.clips[0].path);
+  // Only open a clip the user asked for: ?clip=, --clip on the server, or the last one they used here. Never the first of the list.
+  let last = null; try { last = localStorage.getItem(LS + "lastClip"); } catch {}
+  const q = new URLSearchParams(location.search).get("clip") || r.startClip || (last && r.clips.some((c) => c.path === last) ? last : null);
   if (q) { sel.value = q; openClip(q, (r.clips.find((c) => c.path === q) || {}).project || null); }
+  else toast("Escolha um clipe na lista para começar.");
 }
 async function openClip(path, project) {
   if (!path) return;
   UI.clip = path; UI.clipProject = project || guessProject(path);
+  try { localStorage.setItem(LS + "lastClip", path); } catch {}
   restoreForClip(path);
   $("#clipName").textContent = path.split(/[\\/]/).slice(-3).join("/");
   if (!UI.slugTouched) $("#slug").value = UI.clipProject || slugify(path.split(/[\\/]/).pop().replace(/\.[^.]+$/, ""));
@@ -445,6 +449,26 @@ async function save() {
   try { await navigator.clipboard.writeText(promptText()); } catch {}
 }
 $("#save").onclick = save;
+// ---- "Testar de verdade": real HyperFrames snapshot of the current look
+async function testReal() {
+  const slug = $("#slug").value.trim();
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) return toast("Slug inválido: minúsculas, números e hífens.");
+  if (!UI.clip) return toast("Escolha um clipe antes de testar.");
+  const dlg = $("#testDlg"), body = $("#testBody"), btn = $("#testReal");
+  body.innerHTML = `<p class="test-wait">Montando o projeto de teste e capturando frames com o HyperFrames… no seu PC pode levar um minuto.</p>`;
+  $("#testPath").textContent = ""; btn.classList.add("busy"); if (!dlg.open) dlg.showModal();
+  try {
+    const r = await fetch("/api/test", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ project: slug, look: lookJson(), from: video.currentTime || 0, dur: 8 }) }).then((x) => x.json());
+    if (r.error) { body.innerHTML = `<div class="test-err">${esc(r.error)}</div>`; return; }
+    const label = (f) => { const m = /at-(\d+(?:\.\d+)?)s/.exec(f); return m ? `${Number(m[1]).toFixed(1)} s` : f; };
+    body.innerHTML = `<div class="shots ${UI.landscape ? "wide" : ""}">${r.images.map((im, i) => `<figure class="shot"><a href="${im.url}" target="_blank" rel="noopener"><img src="${im.url}" alt="${esc(im.file)}" loading="lazy"></a><figcaption><span>${label(im.file)}</span><span>${esc(im.file)}</span></figcaption></figure>`).join("")}</div>`;
+    $("#testPath").textContent = `${r.dir} · ${r.images.length} frames · ${(r.ms / 1000).toFixed(0)} s · trecho a partir de ${r.start.toFixed(1)} s`;
+    toast("Frames reais prontos.");
+  } catch (e) { body.innerHTML = `<div class="test-err">${esc(e.message || e)}</div>`; }
+  finally { btn.classList.remove("busy"); }
+}
+$("#testReal").onclick = testReal;
+$("#testClose").onclick = () => $("#testDlg").close();
 $("#slug").oninput = () => { UI.slugTouched = true; };
 $("#copyPrompt").onclick = async () => { try { await navigator.clipboard.writeText(promptText()); toast("Prompt copiado."); } catch { toast("Não deu para copiar; veja a Revisão."); } };
 
