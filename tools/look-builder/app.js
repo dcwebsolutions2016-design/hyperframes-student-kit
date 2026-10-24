@@ -193,7 +193,7 @@ function capturePoster() {
   posterTimer = setTimeout(() => {
     const c = document.createElement("canvas"); c.width = UI.landscape ? 640 : 360; c.height = UI.landscape ? 360 : 640;
     try { c.getContext("2d").drawImage(video, 0, 0, c.width, c.height); UI.poster = c.toDataURL("image/jpeg", 0.8); } catch { UI.poster = ""; }
-    $$(".card .cam").forEach((el) => (el.style.backgroundImage = UI.poster ? `url(${UI.poster})` : "none"));
+    $$(".card .cam, .preset .cam").forEach((el) => (el.style.backgroundImage = UI.poster ? `url(${UI.poster})` : "none"));
     if (!$$(".card .cam").length) renderStep();
   }, 150);
 }
@@ -284,6 +284,35 @@ function pick(step, id, multi) {
 const gifFrame = (src) => `<div class="frame gif" style="padding-bottom:62%"><img src="${esc(src)}" alt="" loading="lazy" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain"></div>`;
 const divider = (title, sub) => `<div class="divider" style="grid-column:1/-1"><b>${esc(title)}</b><span>${esc(sub)}</span></div>`;
 
+// ---- preset cards: a mini frame of the clip with the preset's hook and first caption word in its colours/fonts.
+// A generated tile at assets/presets/<id>.png|jpg (see assets/presets/PROMPT-CHATGPT.md) replaces the drawn one.
+const PRESET_IMG = {};
+async function loadPresetImages() {
+  try { const r = await fetch("/api/preset-images").then((x) => x.json()); Object.assign(PRESET_IMG, r.images || {}); } catch {}
+  if (Object.keys(PRESET_IMG).length && UI.step === 0) renderStep();
+}
+function presetCard(p) {
+  const ratio = (UI.H / UI.W) * 100;
+  const img = PRESET_IMG[p.id];
+  const frame = !p.skill ? `<div class="pframe blank">∅</div>`
+    : img ? `<div class="pframe" style="padding-bottom:${Math.min(ratio, 100)}%"><img src="${img}" alt="" loading="lazy"></div>`
+    : `<div class="pframe" style="padding-bottom:${ratio}%"><div class="cam" style="${UI.poster ? `background-image:url(${UI.poster})` : ""}"></div><div class="world" style="width:${UI.W}px;height:${UI.H}px"></div></div>`;
+  const acc = p.picks.colours ? byId(COLOURS, p.picks.colours).vars.acc : "#333";
+  return `<button class="preset ${L.preset === p.id ? "on" : ""}" data-p="${p.id}" title="${esc(p.desc)}" style="--pacc:${acc}">${frame}<b>${esc(p.name)}</b><span>${esc(p.skill ? (SKILLS[p.skill] || {}).name || p.skill : "nada marcado")}</span></button>`;
+}
+function fillPresetCards() {
+  $$(".preset[data-p]").forEach((el) => {
+    const p = byId(PRESETS, el.dataset.p); const w = $(".world", el), f = $(".pframe", el);
+    if (!p || !p.skill || !w || !f) return;
+    const s = withPick({ colours: p.picks.colours, fonts: p.picks.fonts });
+    const hook = byId(HOOKS, p.picks.hook && p.picks.hook !== "none" ? p.picks.hook : "big-caps");
+    const caps = byId(CAPTIONS, p.picks.captions && p.picks.captions !== "none" ? p.picks.captions : "one-word-outline");
+    w.innerHTML = hook.render(s) + caps.render(s);
+    const first = $(".w", w); if (first) first.style.opacity = 1;
+    w.style.transform = `scale(${f.clientWidth / UI.W})`;
+  });
+}
+
 // cycle one-word captions inside an element
 function cycleWords(tl, el, start = 0, dt = 0.34, hold = 0) {
   const ws = $$(".w", el); if (!ws.length) return;
@@ -302,7 +331,8 @@ function renderStep() {
   renderPicks();
   $("#stepHelp").textContent = st.help;
   const grid = $("#grid"); grid.classList.toggle("wide", UI.landscape || st.id === "review");
-  $("#quick").innerHTML = UI.step === 0 ? `<span class="lbl">Começo rápido:</span>` + PRESETS.map((p) => `<button class="${L.preset === p.id ? "on" : ""}" data-p="${p.id}" title="${esc(p.desc)}"><i style="background:${p.picks.colours ? byId(COLOURS, p.picks.colours).vars.acc : "#333"}"></i>${esc(p.name)}</button>`).join("") + `<button id="surprise" title="Um look coerente de uma skill, ao acaso">🎲 Surpreenda-me</button>` : "";
+  $("#quick").innerHTML = UI.step === 0 ? `<span class="lbl" style="width:100%">Começo rápido: um look pronto de uma skill. Você muda qualquer peça depois.</span><div class="presets">` + PRESETS.map((p) => presetCard(p)).join("") + `<button class="preset surprise" id="surprise" title="Um look coerente de uma skill, ao acaso"><div class="pframe dice">🎲</div><b>Surpreenda-me</b><span>look coerente, ao acaso</span></button></div>` : "";
+  if (UI.step === 0) requestAnimationFrame(fillPresetCards);
   if (st.id === "captions") {
     UI.capFilter = UI.capFilter || "all";
     const lds = LDS.available ? `${LDS.prontos.length} prontos · ${LDS.entradas.length} entradas` : "catálogo não encontrado";
@@ -582,6 +612,6 @@ let toastT; function toast(msg) { const t = $("#toast"); t.textContent = msg; t.
 function esc(s) { return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
 // boot
-syncSliders(); layoutStage(); renderStep(); rebuildMain(); loadLds(); loadClips();
+syncSliders(); layoutStage(); renderStep(); rebuildMain(); loadLds(); loadPresetImages(); loadClips();
 
-window.__lb = { L, UI, rebuildMain, renderStep, lookJson };
+window.__lb = { L, UI, rebuildMain, renderStep, lookJson, fillPresetCards };

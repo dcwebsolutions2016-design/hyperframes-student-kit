@@ -98,3 +98,10 @@ caixa do rosto) e o queixo. Os sliders "Topo da cabeça" e "Legenda (topo)" já 
 mostra o rosto detectado. O botão "Detectar cabeça" refaz; a caixa "automático ao abrir um clipe" desliga a
 detecção automática. Precisa de internet na primeira vez (modelo e wasm vêm do CDN e ficam em cache). Vídeos sem
 rosto (animações, telas) caem no aviso "Nenhum rosto encontrado" e você ajusta à mão.
+
+## Cards de preset
+
+No passo 1, "Começo rápido" mostra cada preset como um card com uma miniatura do seu clipe e o gancho nas cores e
+fontes daquele look. Se quiser ilustrações geradas (por exemplo no ChatGPT), siga
+`assets/presets/PROMPT-CHATGPT.md`: salve `celular.png`, `editorial.png`, … em `assets/presets/` e a interface passa
+a usá-las no lugar da miniatura desenhada.

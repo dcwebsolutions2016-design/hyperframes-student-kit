@@ -222,6 +222,11 @@ const server = createServer(async (req, res) => {
       return existsSync(file) ? streamFile(req, res, file, { "cache-control": "no-store" }) : notFound(res);
     }
     if (p === "/api/testlist") { const slug = url.searchParams.get("project"); return json(res, 200, { images: slugOk(slug) ? listSnapshots(join(root, "video-projects", slug)).map((x) => ({ ...x, url: `/api/testimg?project=${encodeURIComponent(slug)}&f=${encodeURIComponent(x.file)}&v=${Math.round(x.mtime)}` })) : [] }); }
+    if (p === "/api/preset-images") {
+      const d = join(here, "assets", "presets");
+      const files = existsSync(d) ? readdirSync(d).filter((f) => /\.(png|jpe?g|webp)$/i.test(f)) : [];
+      return json(res, 200, { images: Object.fromEntries(files.map((f) => [f.replace(/\.[^.]+$/, ""), `/assets/presets/${f}`])) });
+    }
     if (p === "/api/lds") return json(res, 200, ldsCatalog());
     if (p.startsWith("/lds/") && LDS_DIR) {
       const f = resolve(LDS_DIR, p.slice(5));

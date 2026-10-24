@@ -123,6 +123,20 @@ body{display:grid;grid-template-rows:auto 1fr auto;height:100vh;overflow:hidden}
 .quick button.on{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
 .quick button i{width:12px;height:12px;border-radius:50%;display:inline-block;box-shadow:inset 0 0 0 1px rgba(255,255,255,.15)}
 .quick .lbl{color:var(--dim);font-size:12.5px;margin-right:2px}
+.presets{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:10px;width:100%;margin:4px 0 10px}
+.quick .preset{background:var(--bg3);border:1px solid var(--line);border-radius:14px;padding:6px 6px 8px;display:flex;flex-direction:column;gap:3px;text-align:left;color:var(--fg);cursor:pointer;transition:border-color var(--t),transform var(--t),box-shadow var(--t);position:relative;overflow:hidden}
+.quick .preset:hover{border-color:var(--line3);transform:translateY(-2px);box-shadow:var(--shadow)}
+.quick .preset.on{border-color:var(--pacc,var(--acc));box-shadow:0 0 0 1px var(--pacc,var(--acc))}
+.preset.on::after{content:"✓";position:absolute;right:10px;top:10px;width:20px;height:20px;border-radius:50%;background:var(--pacc,var(--acc));color:#111;display:grid;place-items:center;font-size:11px;font-weight:800}
+.preset .pframe{position:relative;width:100%;background:#000;border-radius:9px;overflow:hidden;border-bottom:3px solid var(--pacc,transparent)}
+.preset .pframe .cam{position:absolute;inset:0;background:#000 center/cover no-repeat}
+.preset .pframe .world{position:absolute;left:0;top:0;transform-origin:0 0;pointer-events:none}
+.preset .pframe img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.preset .pframe.blank,.preset .pframe.dice{padding-bottom:0;height:92px;display:grid;place-items:center;font-size:30px;color:var(--faint);background:var(--bg2);border-bottom-color:transparent}
+.preset .pframe.dice{font-size:34px}
+.preset b{font-size:12.5px;margin-top:4px;line-height:1.2}
+.preset span{font-size:11px;color:var(--dim);line-height:1.25}
+.quick .preset.surprise{border-style:dashed}
 .quick .status{margin-left:auto;font-size:12px}
 .quick .status.ok{color:var(--ok)}
 .quick button:disabled{opacity:.4;cursor:default}
