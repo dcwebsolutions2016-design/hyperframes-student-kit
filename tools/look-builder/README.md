@@ -147,3 +147,11 @@ USER_FONTS="C:\caminho\da\pasta" node tools/look-builder/server.mjs
 - `looks.tenfold.mjs`: os três looks do /video-edit da Ten Fold (Bold, Cool girl, Cool dude) como presets `tf-*`.
 - Skill `/look-builder` (`.claude/skills/look-builder/`): chama a edição a partir do `look.json` ou de um template id,
   como os pacotes gringos fazem com "/". Ela roteia para a skill do kit que o look aponta.
+
+## Visual do painel
+
+O painel segue o estilo do guia Brand Nat: página creme quente, cards brancos com sombra suave, tinta espresso,
+amarelo-manteiga de acento, títulos Inter Tight com um detalhe em Instrument Serif itálico, botões em pílula, barra
+de filtros fixa e uma bandeja escura embaixo com as escolhas. O botão ◐ no topo alterna claro/escuro (fica salvo).
+Os cards de preset e de template animam ao passar o mouse (gancho, legenda e o primeiro elemento) para você ver
+qual é qual antes de clicar.

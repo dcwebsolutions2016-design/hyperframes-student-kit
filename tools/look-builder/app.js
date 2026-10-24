@@ -270,6 +270,7 @@ function renderPicks() {
     L.captions && ["Legendas", (capById(L.captions) || {}).name, 3], L.elements.length && ["Elementos", `${L.elements.length}`, 4], L.motion.length && ["Motion", `${L.motion.length}`, 5],
   ].filter(Boolean);
   $("#picks").innerHTML = items.map(([k, v, i]) => `<button data-i="${i}" title="Ir para ${k}"><i></i>${k}: <b>${esc(v)}</b></button>`).join("");
+  const tray = $("#trayPicks"); if (tray) tray.innerHTML = items.length ? items.map(([k, v]) => `<span class="code">${esc(k)} · ${esc(v)}</span>`).join("") : `<span class="code" style="opacity:.6">nada escolhido ainda</span>`;
   $$("#picks button").forEach((b) => (b.onclick = () => go(Number(b.dataset.i))));
 }
 function go(i) { UI.step = Math.max(0, Math.min(STEPS.length - 1, i)); renderStep(); autosave(); }
@@ -320,25 +321,43 @@ async function loadPresetImages() {
   try { const r = await fetch("/api/preset-images").then((x) => x.json()); Object.assign(PRESET_IMG, r.images || {}); } catch {}
   if (Object.keys(PRESET_IMG).length && UI.step === 0) renderStep();
 }
-function presetCard(p) {
+function presetCard(p, big = false) {
   const ratio = (UI.H / UI.W) * 100;
   const img = PRESET_IMG[p.id];
   const frame = !p.skill ? `<div class="pframe blank">∅</div>`
     : img ? `<div class="pframe" style="padding-bottom:${Math.min(ratio, 100)}%"><img src="${img}" alt="" loading="lazy"></div>`
-    : `<div class="pframe" style="padding-bottom:${ratio}%"><div class="cam" style="${UI.poster ? `background-image:url(${UI.poster})` : ""}"></div><div class="world" style="width:${UI.W}px;height:${UI.H}px"></div></div>`;
-  const acc = p.picks.colours ? byId(COLOURS, p.picks.colours).vars.acc : "#333";
-  return `<button class="preset ${L.preset === p.id ? "on" : ""}" data-p="${p.id}" title="${esc(p.desc)}" style="--pacc:${acc}">${frame}<b>${esc(p.name)}</b><span>${esc(p.skill ? (SKILLS[p.skill] || {}).name || p.skill : "nada marcado")}</span></button>`;
+    : `<div class="pframe" style="padding-bottom:${ratio}%"><div class="cam" style="${UI.poster ? `background-image:url(${UI.poster})` : ""}"></div><div class="world" style="width:${UI.W}px;height:${UI.H}px"></div><i class="play">▶</i></div>`;
+  const acc = p.picks.colours ? (byId(COLOURS, p.picks.colours) || {}).vars?.acc || "#333" : "#333";
+  return `<button class="preset ${big ? "big" : ""} ${L.preset === p.id ? "on" : ""}" data-p="${p.id}" title="${esc(p.desc)}" style="--pacc:${acc}">${frame}<b>${esc(p.name)}</b><span>${esc(big ? p.desc : p.skill ? (SKILLS[p.skill] || {}).name || p.skill : "nada marcado")}</span></button>`;
 }
+// Static mini preview (hook + first caption word + first element); on hover the card plays a short loop.
+function presetScene(p) {
+  const s = withPick({ colours: p.picks.colours, fonts: p.picks.fonts });
+  const hook = byId(HOOKS, p.picks.hook && p.picks.hook !== "none" ? p.picks.hook : "big-caps");
+  const caps = capById(p.picks.captions && p.picks.captions !== "none" ? p.picks.captions : "one-word-outline") || byId(CAPTIONS, "one-word-outline");
+  const el = (p.picks.elements || []).map((id) => byId(ELEMENTS, id)).find(Boolean);
+  return { s, hook, caps, el, html: hook.render(s) + caps.render(s) + (el ? el.render(s) : "") };
+}
+const presetTls = new Map();
 function fillPresetCards() {
   $$(".preset[data-p]").forEach((el) => {
-    const p = byId(PRESETS, el.dataset.p); const w = $(".world", el), f = $(".pframe", el);
+    const p = byId(PRESETS, el.dataset.p); const w = $(".world", el), f = $(".pframe", el), camEl = $(".cam", el);
     if (!p || !p.skill || !w || !f) return;
-    const s = withPick({ colours: p.picks.colours, fonts: p.picks.fonts });
-    const hook = byId(HOOKS, p.picks.hook && p.picks.hook !== "none" ? p.picks.hook : "big-caps");
-    const caps = byId(CAPTIONS, p.picks.captions && p.picks.captions !== "none" ? p.picks.captions : "one-word-outline");
-    w.innerHTML = hook.render(s) + caps.render(s);
-    const first = $(".w", w); if (first) first.style.opacity = 1;
+    const scene = presetScene(p);
+    const paint = () => { w.innerHTML = scene.html; const first = $(".w", w); if (first) first.style.opacity = 1; const e = $(".el", w); if (e && scene.el && scene.el.camera) e.style.opacity = 0.9; };
+    paint();
     w.style.transform = `scale(${f.clientWidth / UI.W})`;
+    el.onmouseenter = () => {
+      if (presetTls.get(el)) return;
+      w.innerHTML = scene.html;
+      const tl = gsap.timeline({ repeat: -1, repeatDelay: 0.6 });
+      const h = $(".hook", w); if (h) scene.hook.anim(tl, h);
+      playCaptions(tl, w, scene.caps, 0.3);
+      const e = $(".el", w); if (e) { const m = byId(MOTIONS, (p.picks.motion || [])[0]) || byId(MOTIONS, "blur-rise"); const sub = gsap.timeline(); if (scene.el.anim) scene.el.anim(sub, e, camEl); else if (!m.camera) m.anim(sub, e, camEl); else byId(MOTIONS, "blur-rise").anim(sub, e); tl.add(sub, 1.0); }
+      tl.to({}, { duration: 1.2 });
+      presetTls.set(el, tl); el.classList.add("playing");
+    };
+    el.onmouseleave = () => { const tl = presetTls.get(el); if (tl) { tl.kill(); presetTls.delete(el); } if (camEl) gsap.set(camEl, { clearProps: "all" }); paint(); el.classList.remove("playing"); };
   });
 }
 
@@ -390,13 +409,21 @@ function renderStep() {
   const st = STEPS[UI.step];
   renderNav();
   $("#stepKicker").textContent = `Passo ${UI.step + 1} de 7`;
+  $("#stepNum").textContent = String(UI.step + 1).padStart(2, "0");
   $("#stepTitle").textContent = st.title;
   $("#progressBar").style.width = `${((UI.step + 1) / STEPS.length) * 100}%`;
   renderPicks();
   $("#stepHelp").textContent = st.help;
   const grid = $("#grid"); grid.classList.toggle("wide", UI.landscape || st.id === "review");
-  $("#quick").innerHTML = UI.step === 0 ? `<span class="lbl" style="width:100%">Começo rápido: um look pronto de uma skill. Você muda qualquer peça depois.</span><div class="presets">` + PRESETS.map((p) => presetCard(p)).join("") + `<button class="preset surprise" id="surprise" title="Um look coerente de uma skill, ao acaso"><div class="pframe dice">🎲</div><b>Surpreenda-me</b><span>look coerente, ao acaso</span></button></div>` : "";
-  if (UI.step === 0) requestAnimationFrame(fillPresetCards);
+  if (UI.step === 0) {
+    const isTpl = (p) => /^(tpl|tf)-/.test(p.id);
+    const kit = PRESETS.filter((p) => !isTpl(p)), tpl = PRESETS.filter(isTpl);
+    $("#quick").innerHTML = `<span class="lbl" style="width:100%">Começo rápido: um look pronto. Passe o mouse num card para ver a animação; clique para aplicar. Você muda qualquer peça depois.</span>
+      <div class="presets">${kit.map((p) => presetCard(p)).join("")}<button class="preset surprise" id="surprise" title="Um look coerente de uma skill, ao acaso"><div class="pframe dice">🎲</div><b>Surpreenda-me</b><span>look coerente, ao acaso</span></button></div>
+      <div class="divider" style="width:100%"><b>Templates <i class="serif">nossa versão</i></b><span>Formatos inteiros (layout + legendas + elementos), inspirados nos pacotes gringos. ${tpl.length} templates.</span></div>
+      <div class="presets tpl">${tpl.map((p) => presetCard(p, true)).join("")}</div>`;
+  } else $("#quick").innerHTML = "";
+  if (UI.step === 0) setTimeout(fillPresetCards, 0);
   if (st.id === "captions") {
     UI.capFilter = UI.capFilter || "all";
     const lds = LDS.available ? `${LDS.prontos.length} prontos · ${LDS.entradas.length} entradas` : "catálogo não encontrado";
@@ -443,7 +470,7 @@ function renderStep() {
   grid.innerHTML = html;
   wireCards(st.id, multi);
   if (st.id === "fonts") wireUserFonts();
-  requestAnimationFrame(() => { scaleWorlds(); const cards = $$(".card"); list.forEach((o, i) => fillCard(st.id, o, cards[i])); });
+  setTimeout(() => { scaleWorlds(); const cards = $$(".card"); list.forEach((o, i) => fillCard(st.id, o, cards[i])); }, 0);
 }
 
 // one-word captions cycle; LDS screens also reveal word by word
@@ -673,6 +700,7 @@ $("#copyPrompt").onclick = async () => { try { await navigator.clipboard.writeTe
 $("#clipSelect").onchange = (e) => openClip(e.target.value, e.target.selectedOptions[0]?.dataset.project || null);
 $("#clipLoad").onclick = () => openClip($("#clipPath").value.trim(), null);
 $("#play").onclick = () => { if (video.paused) { video.play(); if (mainTl) mainTl.restart(); $("#play").textContent = "Pause"; } else { video.pause(); $("#play").textContent = "Play"; } };
+(function theme() { const root = document.documentElement; let t = null; try { t = localStorage.getItem(LS + "theme"); } catch {} if (t) root.dataset.theme = t; $("#theme").onclick = () => { const n = root.dataset.theme === "dark" ? "light" : "dark"; root.dataset.theme = n; try { localStorage.setItem(LS + "theme", n); } catch {} }; })();
 $("#reset").onclick = () => { if (confirm("Limpar todas as escolhas deste clipe?")) resetAll(); };
 $("#copyJson").onclick = async () => { try { await navigator.clipboard.writeText(JSON.stringify(lookJson(), null, 2)); toast("JSON copiado."); } catch { toast("Não deu para copiar."); } };
 // keyboard: ← → steps · 1–9 pick the Nth card · Esc closes "mais como essa" boxes
