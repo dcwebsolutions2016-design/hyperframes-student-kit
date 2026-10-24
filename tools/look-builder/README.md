@@ -155,3 +155,13 @@ amarelo-manteiga de acento, títulos Inter Tight com um detalhe em Instrument Se
 de filtros fixa e uma bandeja escura embaixo com as escolhas. O botão ◐ no topo alterna claro/escuro (fica salvo).
 Os cards de preset e de template animam ao passar o mouse (gancho, legenda e o primeiro elemento) para você ver
 qual é qual antes de clicar.
+
+## Visual atual (landing edicao-claude)
+
+O painel usa a paleta da landing `landing-pages/edicao-claude` (sala escura, texto creme, acento clay laranja,
+Montserrat + Instrument Sans + JetBrains Mono). Os cards de preset e de template mostram os **mesmos mini celulares
+da landing** (`mockups.mjs`, gerado por `node tools/look-builder/sync-mockups.mjs` a partir do HTML da landing), com
+o apresentador neutro; ao passar o mouse o card troca para a prévia real sobre o seu clipe. O botão ◐ alterna para o
+tema claro creme. Quando não há clipe, o palco e os cards usam um avatar neutro (`avatar.mjs`); a caixa "avatar" ao
+lado de "guias" força o avatar mesmo com clipe. As legendas do Legenda Dinâmica aparecem em cards 9:16 como as outras,
+com o caráter tipográfico do modelo (serif, cursiva, neon, impacto…) e a cor do look; o GIF original fica no canto.

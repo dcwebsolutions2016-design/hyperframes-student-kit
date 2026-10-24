@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Look builder</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Fraunces:ital,wght@0,300;0,900;1,900&family=Archivo:wght@400;500;700&family=Playfair+Display:wght@700&family=Caveat:wght@700&family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@800&family=Instrument+Serif:ital@1&family=Plus+Jakarta+Sans:wght@500;700;800&family=Space+Mono&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Fraunces:ital,wght@0,300;0,900;1,900&family=Archivo:wght@400;500;700&family=Playfair+Display:wght@700&family=Caveat:wght@700&family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@800&family=Instrument+Serif:ital@1&family=Montserrat:wght@600;700;800&family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@500;700;800&family=Space+Mono&display=swap">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -27,7 +27,7 @@
     </div>
     <div class="stage-wrap">
       <div class="stage" id="stage">
-        <div class="empty" id="stageEmpty"><b>Escolha um clipe</b><span>Selecione um vídeo acima ou cole o caminho. Pause no frame que quiser usar como fundo dos cards.</span></div>
+        <div class="empty" id="stageEmpty"><b>Sem clipe: avatar</b><span>Escolha um vídeo acima para ver o look no seu rosto.</span></div>
         <div class="cam" id="cam"><video id="video" muted playsinline preload="auto"></video></div>
         <div class="world" id="world"></div>
         <div class="guides" id="guides"><i class="g head"></i><i class="g cap"></i><i class="g safe"></i><i class="g face"></i></div>
@@ -40,6 +40,7 @@
       <span class="time" id="time">0:00 / 0:00</span>
       <label class="chk"><input type="checkbox" id="mute" checked> mudo</label>
       <label class="chk"><input type="checkbox" id="showGuides" checked> guias</label>
+      <label class="chk" title="Mostra um apresentador neutro no lugar do seu clipe, como nas amostras dos pacotes"><input type="checkbox" id="useAvatar"> avatar</label>
     </div>
     <details class="texts adjust" open>
     <summary>Enquadramento e detecção</summary>

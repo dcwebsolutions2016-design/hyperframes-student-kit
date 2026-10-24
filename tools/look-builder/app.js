@@ -5,7 +5,9 @@ import "./looks.castilho.mjs"; // the 35 effects from castilhoia.com
 import "./looks.ajene.mjs";    // our versions of the editing.ajenepinnock.com templates
 import "./looks.tenfold.mjs";  // the three Ten Fold looks
 import { installBrandNat } from "./looks.brandnat.mjs";
-import { sketchFor } from "./sketch.mjs"; // face-free layout sketches for the template cards // Brand Nat Style Pack codes, data read by the server
+import { sketchFor } from "./sketch.mjs";
+import { avatarDataUrl } from "./avatar.mjs";
+import { mockupHtml, MOCKUP_CSS, PERSON_DEFS } from "./mockups.mjs"; // mini phones from the kit landing page // neutral presenter used as background without a clip (or by choice) // face-free layout sketches for the template cards // Brand Nat Style Pack codes, data read by the server
 
 // Brand Nat pack (105 codes) — options are added at runtime when the server finds the pack.
 const BN = { available: false, finishes: [], dir: null };
@@ -193,11 +195,14 @@ async function detectHead({ silent = false } = {}) {
     return null;
   } finally { btn.classList.remove("busy"); btn.textContent = "Detectar cabeça"; }
 }
+// background for cards and stage: the student clip frame, or the neutral avatar when there is no clip / the toggle is on
+function posterUrl() { return (UI.useAvatar || !UI.poster) ? avatarDataUrl(UI.landscape) : UI.poster; }
+function applyBackgrounds() { const u = posterUrl(); $$(".card .cam, .preset .cam").forEach((el) => (el.style.backgroundImage = `url(${u})`)); const c = $("#cam"); if (c) c.style.backgroundImage = UI.clip && !UI.useAvatar ? "none" : `url(${u})`; }
 const guessProject = (p) => { const m = /video-projects[\\/]([a-z0-9-]+)[\\/]/.exec(p); return m ? m[1] : null; };
 const slugify = (s) => s.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "meu-look";
 
 video.addEventListener("loadedmetadata", () => {
-  stage.classList.add("has-clip");
+  stage.classList.add("has-clip"); stage.classList.toggle("avatar", !!UI.useAvatar); applyBackgrounds();
   UI.landscape = video.videoWidth > video.videoHeight;
   UI.W = UI.landscape ? 1920 : 1080; UI.H = UI.landscape ? 1080 : 1920;
   if (UI.landscape) { UI.headTop = 300; UI.capTop = 880; } else { UI.headTop = 620; UI.capTop = 1150; }
@@ -223,7 +228,7 @@ function capturePoster() {
   posterTimer = setTimeout(() => {
     const c = document.createElement("canvas"); c.width = UI.landscape ? 640 : 360; c.height = UI.landscape ? 360 : 640;
     try { c.getContext("2d").drawImage(video, 0, 0, c.width, c.height); UI.poster = c.toDataURL("image/jpeg", 0.8); } catch { UI.poster = ""; }
-    $$(".card .cam, .preset .cam").forEach((el) => (el.style.backgroundImage = UI.poster ? `url(${UI.poster})` : "none"));
+    applyBackgrounds();
     if (!$$(".card .cam").length) renderStep();
   }, 150);
 }
@@ -283,7 +288,7 @@ $("#next").onclick = () => (UI.step === STEPS.length - 1 ? save() : go(UI.step +
 function killCards() { cardTls.forEach((t) => t.kill()); cardTls = []; }
 function frameHtml(S) {
   const ratio = (S.H / S.W) * 100;
-  return `<div class="frame" style="padding-bottom:${ratio}%"><div class="cam" style="background:#000 center/cover no-repeat;${UI.poster ? `background-image:url(${UI.poster})` : ""}"></div><div class="world" style="width:${S.W}px;height:${S.H}px"></div></div>`;
+  return `<div class="frame" style="padding-bottom:${ratio}%"><div class="cam" style="background:#000 center/cover no-repeat;background-image:url(${posterUrl()})"></div><div class="world" style="width:${S.W}px;height:${S.H}px"></div></div>`;
 }
 function scaleWorlds() {
   $$(".card .frame").forEach((f) => { const w = $(".world", f); if (w) w.style.transform = `scale(${f.clientWidth / UI.W})`; });
@@ -323,14 +328,18 @@ async function loadPresetImages() {
   try { const r = await fetch("/api/preset-images").then((x) => x.json()); Object.assign(PRESET_IMG, r.images || {}); } catch {}
   if (Object.keys(PRESET_IMG).length && UI.step === 0) renderStep();
 }
+// landing-page mockup kind per preset (templates and kit looks alike)
+const MOCK_KIND = { "tpl-business-reels": "negocios", "tpl-personal-reels": "pessoal", "tpl-explainer-panel": "painel", "tpl-glass-explainer": "vidro", "tpl-visual-essay": "ensaio", "tpl-split-reel": "split", "tpl-broll-stacked": "broll", "tpl-fitted-captions": "encaixe", "tpl-image-cluster": "cluster", "tpl-cutout-backdrop": "recorte", "tpl-cutout-grid": "grade", "tpl-depth-ui": "profundo", "tpl-ranking-format": "ranking", "tpl-tiktok-style": "negocios", "tpl-yap-and-show": "cluster", "tpl-clone-versus": "grade", "tpl-cinematic-type": "ensaio", "tpl-top5": "ranking", "tpl-if-then": "painel", "tpl-this-vs-that": "vidro", "tpl-rapid-list": "clipes", "tpl-natural-story": "recorte", "tpl-ear-to-ear": "youtube", "tpl-tips-breakdown": "chamada",
+  "tf-bold": "encaixe", "tf-cool-girl": "cluster", "tf-cool-dude": "ensaio", celular: "pessoal", editorial: "cluster", anuncio: "painel", colagem: "recorte", explicativo: "split", "vsl-roxo": "vidro", "vsl-clean": "encaixe", aurora: "vidro", vox: "ensaio", zee: "profundo", castilho: "negocios" };
+const WIDE = new Set(["tpl-ear-to-ear", "tpl-tips-breakdown"]);
 function presetCard(p, big = false) {
   const ratio = (UI.H / UI.W) * 100;
   const img = PRESET_IMG[p.id];
   const frame = !p.skill ? `<div class="pframe blank">∅</div>`
     : img ? `<div class="pframe" style="padding-bottom:${Math.min(ratio, 100)}%"><img src="${img}" alt="" loading="lazy"></div>`
-    : `<div class="pframe ${big ? "has-sketch" : ""}" style="padding-bottom:${big ? 177.8 : ratio}%">${big ? `<div class="sk">${sketchFor(p, (byId(COLOURS, p.picks.colours) || COLOURS[0]).vars.acc, isLds() ? L.captions : null)}</div>` : ""}<div class="cam" style="${UI.poster ? `background-image:url(${UI.poster})` : ""}"></div><div class="world" style="width:${UI.W}px;height:${UI.H}px"></div><i class="play">▶</i></div>`;
+    : `<div class="pframe has-sketch ${WIDE.has(p.id) ? "wide" : ""}" style="padding-bottom:${WIDE.has(p.id) ? 56.25 : 177.8}%"><div class="sk">${MOCK_KIND[p.id] ? mockupHtml(MOCK_KIND[p.id], WIDE.has(p.id)) : sketchFor(p, (byId(COLOURS, p.picks.colours) || COLOURS[0]).vars.acc, isLds() ? L.captions : null)}</div><div class="cam" style="background-image:url(${posterUrl()})"></div><div class="world" style="width:${UI.W}px;height:${UI.H}px"></div><i class="play">▶</i></div>`;
   const acc = p.picks.colours ? (byId(COLOURS, p.picks.colours) || {}).vars?.acc || "#333" : "#333";
-  return `<button class="preset ${big ? "big" : ""} ${L.preset === p.id ? "on" : ""}" data-p="${p.id}" title="${esc(p.desc)}" style="--pacc:${acc}">${frame}<b>${esc(p.name)}</b><span>${esc(big ? p.desc : p.skill ? (SKILLS[p.skill] || {}).name || p.skill : "nada marcado")}</span></button>`;
+  return `<button class="preset ${big ? "big" : ""} ${L.preset === p.id ? "on" : ""}" data-p="${p.id}" title="${esc(p.desc)}" style="--pacc:${acc}">${frame}<b>${esc(p.name)}<small>${p.skill ? (WIDE.has(p.id) ? "16:9" : "9:16") : ""}</small></b><span>${esc(big ? p.desc : p.skill ? (SKILLS[p.skill] || {}).name || p.skill : "nada marcado")}</span></button>`;
 }
 // Static mini preview (hook + first caption word + first element); on hover the card plays a short loop.
 function presetScene(p) {
@@ -456,6 +465,7 @@ function renderStep() {
     const q = UI.flt.q.toLowerCase();
     list = list.filter((o) => (inFam(o) || L[st.id].includes(o.id)) && (!q || `${o.name} ${o.desc || ""}`.toLowerCase().includes(q)));
   }
+  let ldsItems = [];
   let html = list.map((o, i) => card({
     idx: i + 1, id: o.id, name: o.name, desc: o.sub || o.desc, skills: o.skills, multi, step: st.id,
     on: multi ? L[st.id].includes(o.id) : L[st.id] === o.id,
@@ -466,7 +476,9 @@ function renderStep() {
   // Legenda Dinâmica (EffectCraft): real GIF previews from the user's catalogue
   if (st.id === "captions" && LDS.available && UI.capFilter !== "kit") {
     html += divider(`Legenda Dinâmica · EffectCraft (${LDS.prontos.length})`, "Prontos do Legenda Dinâmica Studio: palavra-chave gigante, conectivos pequenos, entrada palavra por palavra. Prévia real do catálogo; no palco à esquerda, uma aproximação nas suas cores. A entrada se escolhe no passo Motion.");
-    html += LDS.prontos.map((p, i) => card({ idx: list.length + i + 1, id: `lds:${p.id}`, name: p.name, desc: `${p.modelo} · entrada ${p.entrada} · saída ${p.saida}`, skills: ["legenda-dinamica-studio"], multi: false, step: "captions", on: L.captions === `lds:${p.id}`, body: gifFrame(p.gif) })).join("");
+    // same 9:16 card as the kit captions, rendered over the clip in the look's colours and fonts; the catalogue GIF stays as an inset
+    html += LDS.prontos.map((p, i) => card({ idx: list.length + i + 1, id: `lds:${p.id}`, name: p.name, desc: `${p.modelo} · entrada ${p.entrada} · saída ${p.saida}`, skills: ["legenda-dinamica-studio"], multi: false, step: "captions", on: L.captions === `lds:${p.id}`, body: frameHtml(s).replace("</div></div>", `</div><img class="gif-inset" src="${esc(p.gif)}" alt="" loading="lazy" title="Prévia original do catálogo"></div>`) })).join("");
+    ldsItems = LDS.prontos.map(ldsCaption);
   }
   if (st.id === "motion" && LDS.available && isLds()) {
     html += divider("Entrada da Legenda Dinâmica", "Troca a entrada do pronto escolhido. Uma só; sem escolher, vale a entrada do pronto.");
@@ -475,7 +487,7 @@ function renderStep() {
   grid.innerHTML = html;
   wireCards(st.id, multi);
   if (st.id === "fonts") wireUserFonts();
-  setTimeout(() => { scaleWorlds(); const cards = $$(".card"); list.forEach((o, i) => fillCard(st.id, o, cards[i])); }, 0);
+  setTimeout(() => { scaleWorlds(); const cards = $$(".card"); [...list, ...ldsItems].forEach((o, i) => fillCard(st.id, o, cards[i])); }, 0);
 }
 
 // one-word captions cycle; LDS screens also reveal word by word
@@ -706,7 +718,7 @@ $("#copyPrompt").onclick = async () => { try { await navigator.clipboard.writeTe
 $("#clipSelect").onchange = (e) => openClip(e.target.value, e.target.selectedOptions[0]?.dataset.project || null);
 $("#clipLoad").onclick = () => openClip($("#clipPath").value.trim(), null);
 $("#play").onclick = () => { if (video.paused) { video.play(); if (mainTl) mainTl.restart(); $("#play").textContent = "Pause"; } else { video.pause(); $("#play").textContent = "Play"; } };
-(function theme() { const root = document.documentElement; let t = null; try { t = localStorage.getItem(LS + "theme"); } catch {} if (t) root.dataset.theme = t; $("#theme").onclick = () => { const n = root.dataset.theme === "dark" ? "light" : "dark"; root.dataset.theme = n; try { localStorage.setItem(LS + "theme", n); } catch {} }; })();
+(function theme() { const root = document.documentElement; let t = null; try { t = localStorage.getItem(LS + "theme"); } catch {} if (t === "light") root.dataset.theme = "light"; $("#theme").onclick = () => { const n = root.dataset.theme === "light" ? "dark" : "light"; if (n === "light") root.dataset.theme = "light"; else delete root.dataset.theme; try { localStorage.setItem(LS + "theme", n); } catch {} }; })();
 $("#previewToggle").onclick = () => { const p = $("#preview"); p.classList.toggle("collapsed"); $("#previewToggle").textContent = p.classList.contains("collapsed") ? "Prévia ▸" : "Prévia ▾"; setTimeout(() => { layoutStage(); scaleWorlds(); }, 50); };
 $("#reset").onclick = () => { if (confirm("Limpar todas as escolhas deste clipe?")) resetAll(); };
 $("#copyJson").onclick = async () => { try { await navigator.clipboard.writeText(JSON.stringify(lookJson(), null, 2)); toast("JSON copiado."); } catch { toast("Não deu para copiar."); } };
@@ -723,6 +735,9 @@ $("#back5").onclick = () => (video.currentTime = Math.max(0, video.currentTime -
 $("#fwd5").onclick = () => (video.currentTime = Math.min(video.duration || 0, video.currentTime + 5));
 $("#mute").onchange = (e) => (video.muted = e.target.checked);
 $("#showGuides").onchange = drawGuides;
+$("#useAvatar").onchange = (e) => { UI.useAvatar = e.target.checked; applyBackgrounds(); stage.classList.toggle("avatar", UI.useAvatar || !UI.clip); try { localStorage.setItem(LS + "avatar", UI.useAvatar ? "1" : "0"); } catch {} };
+try { UI.useAvatar = localStorage.getItem(LS + "avatar") === "1"; $("#useAvatar").checked = UI.useAvatar; } catch {}
+stage.classList.add("avatar"); applyBackgrounds();
 $("#detectHead").onclick = () => detectHead();
 $("#autoDetect").onchange = (e) => { try { localStorage.setItem(LS + "autoDetect", e.target.checked ? "1" : "0"); } catch {} };
 try { $("#autoDetect").checked = localStorage.getItem(LS + "autoDetect") !== "0"; } catch {}
@@ -748,7 +763,8 @@ let deb; function debounce(fn) { clearTimeout(deb); deb = setTimeout(fn, 160); }
 let toastT; function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 3200); }
 function esc(s) { return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
-// boot
+// boot: mockup styles and presenter gradients from the landing page
+if (!document.getElementById("mockup-css")) { const st = document.createElement("style"); st.id = "mockup-css"; st.textContent = MOCKUP_CSS; document.head.appendChild(st); document.body.insertAdjacentHTML("afterbegin", PERSON_DEFS); }
 syncSliders(); layoutStage(); renderStep(); rebuildMain(); loadLds(); loadBrandNat(); loadPresetImages(); loadClips();
 
 window.__lb = { L, UI, rebuildMain, renderStep, lookJson, fillPresetCards };

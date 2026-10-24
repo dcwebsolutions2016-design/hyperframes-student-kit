@@ -144,20 +144,36 @@ export const CAPTIONS = [
 // Legenda Dinâmica Studio (EffectCraft): HTML approximation of the LDS logic — 2–4 words per screen, the keyword at
 // ≥110 px, connectives ≥50 px hugging it (before: above-left; after: below-right), each word entering on its beat.
 // The real styles come from the catalogue GIFs; this renderer only shows the look's colours/fonts on the clip.
+// The pronto's "modelo" name sets the typographic character of the keyword; the colour comes from the look's palette
+// (so steps 1 and 2 still change it): serif/revista/elegante → serif italic; cursiva/script/brush → hand font;
+// neon → glow; contorno → stroke; marca-texto → highlight; impacto/tech/condensado → heavy display caps; minimal → body.
+function ldsStyle(S, modelo = "") {
+  const m = modelo.toLowerCase();
+  const serif = S.font.serif || "'EdSerif','Instrument Serif',Georgia,serif", hand = S.font.hand || "'Caveat',cursive";
+  if (/cursiv|script|brush|pincel/.test(m)) return { big: `font-family:${hand};font-weight:700;font-size:128px;line-height:1;color:${S.v.acc}`, caps: false };
+  if (/serif|revista|elegante|cinema/.test(m)) return { big: `font-family:${serif};font-style:italic;font-weight:400;font-size:132px;line-height:1;color:${S.v.acc}`, caps: false };
+  if (/neon/.test(m)) return { big: `${disp(S, 118, "line-height:1")};color:#fff;text-shadow:0 0 14px ${S.v.acc},0 0 40px ${S.v.acc},0 0 80px ${S.v.acc}`, caps: true };
+  if (/contorno|outline/.test(m)) return { big: `${disp(S, 118, "line-height:1")};color:transparent;-webkit-text-stroke:4px ${S.v.acc}`, caps: true };
+  if (/marca/.test(m)) return { big: `${disp(S, 110, "line-height:1.15")};color:#111;background:${S.v.acc};padding:0 18px;display:inline-block`, caps: true };
+  if (/minimal|clean|cinza|branc/.test(m)) return { big: `${body(S, 104, "font-weight:600;line-height:1")};color:${/branc|minimal/.test(m) ? "#fff" : S.v.acc}`, caps: false };
+  return { big: `${disp(S, 118, "line-height:1")};color:${S.v.acc}`, caps: true };
+}
 export function ldsCaption(pronto) {
   return {
     id: `lds:${pronto.id}`, name: pronto.name, desc: `${pronto.modelo} · entrada ${pronto.entrada} · saída ${pronto.saida}`,
     skills: ["legenda-dinamica-studio"], mode: "lds", lds: pronto,
     render: (S) => {
       const ws = words(S); const k = kw(S).toLowerCase();
+      const st = ldsStyle(S, pronto.modelo);
       const screens = []; let cur = [];
       for (const w of ws) { cur.push(w); if (cur.length >= 3 || w.toLowerCase() === k) { screens.push(cur); cur = []; } }
       if (cur.length) screens.push(cur);
       const big = (w) => w.toLowerCase() === k || w.length >= 7;
+      const cs = (w) => (st.caps ? String(w).toUpperCase() : caseOf(S, w));
       return `<div class="ov caps lds" style="left:0;top:${S.capTop - 160}px;width:${S.W}px;height:360px">${screens.map((sc, i) => {
         const bi = Math.max(0, sc.findIndex(big));
-        return `<div class="w scr" data-i="${i}" style="position:absolute;left:0;width:${S.W}px;top:0;opacity:0;text-align:center;color:#fff;text-shadow:0 0 12px rgba(255,255,255,.35),0 4px 24px rgba(0,0,0,.5)">
-          ${sc.map((w, j) => `<span class="ldw" style="display:block;${j === bi ? `${disp(S, 118, "line-height:1")};color:${S.v.acc}` : `${body(S, j < bi ? 54 : 62, "line-height:1.1")};${j < bi ? "text-align:left;padding-left:22%" : j > bi ? "text-align:right;padding-right:22%" : ""}`}">${esc(caseOf(S, w))}</span>`).join("")}</div>`;
+        return `<div class="w scr" data-i="${i}" style="position:absolute;left:0;width:${S.W}px;top:0;opacity:0;text-align:center;color:#fff;text-shadow:0 0 12px rgba(255,255,255,.25),0 4px 24px rgba(0,0,0,.5)">
+          ${sc.map((w, j) => `<span class="ldw" style="display:block;${j === bi ? st.big : `${body(S, j < bi ? 54 : 62, "line-height:1.1")};${j < bi ? "text-align:left;padding-left:22%" : j > bi ? "text-align:right;padding-right:22%" : ""}`}">${esc(j === bi ? cs(w) : caseOf(S, w))}</span>`).join("")}</div>`;
       }).join("")}</div>`;
     },
   };
