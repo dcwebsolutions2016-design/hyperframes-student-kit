@@ -741,7 +741,20 @@ $("#copyPrompt").onclick = async () => { try { await navigator.clipboard.writeTe
 
 // ------------------------------------------------------------------ misc wiring
 $("#clipSelect").onchange = (e) => openClip(e.target.value, e.target.selectedOptions[0]?.dataset.project || null);
-$("#clipLoad").onclick = () => openClip($("#clipPath").value.trim(), null);
+// pasted path: strip the quotes Explorer adds, check it on the server, say why when it fails
+async function openPasted() {
+  const raw = $("#clipPath").value.trim().replace(/^["']+|["']+$/g, "");
+  if (!raw) { toast("Cole o caminho completo do vídeo, por exemplo C:/Users/voce/Videos/clipe.mp4"); $("#clipPath").focus(); return; }
+  if (!/\.(mp4|mov|m4v|webm)$/i.test(raw)) { toast("O caminho precisa terminar em .mp4, .mov, .m4v ou .webm."); return; }
+  const r = await fetch(`/api/clip?check=1&path=${encodeURIComponent(raw)}`).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+  if (!r) { toast("Não achei esse arquivo. Confira o caminho (pasta e nome) e tente de novo."); return; }
+  $("#clipPath").value = r.path;
+  const sel = $("#clipSelect"); if ([...sel.options].some((o) => o.value === r.path)) sel.value = r.path; else sel.value = "";
+  openClip(r.path, null);
+  toast("Clipe aberto.");
+}
+$("#clipLoad").onclick = openPasted;
+$("#clipPath").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); openPasted(); } });
 $("#play").onclick = () => { if (video.paused) { video.play(); if (mainTl) mainTl.restart(); $("#play").textContent = "Pause"; } else { video.pause(); $("#play").textContent = "Play"; } };
 (function theme() { const root = document.documentElement; let t = null; try { t = localStorage.getItem(LS + "theme"); } catch {} if (t === "light") root.dataset.theme = "light"; $("#theme").onclick = () => { const n = root.dataset.theme === "light" ? "dark" : "light"; if (n === "light") root.dataset.theme = "light"; else delete root.dataset.theme; try { localStorage.setItem(LS + "theme", n); } catch {} }; })();
 $("#previewToggle").onclick = () => { const p = $("#preview"); p.classList.toggle("collapsed"); $("#previewToggle").textContent = p.classList.contains("collapsed") ? "Prévia ▸" : "Prévia ▾"; setTimeout(() => { layoutStage(); scaleWorlds(); }, 50); };

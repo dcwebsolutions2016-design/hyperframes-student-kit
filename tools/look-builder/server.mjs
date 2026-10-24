@@ -96,10 +96,14 @@ const slugOk = (s) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(s || "");
 // A clip may live anywhere under the kit or under the user's home folder (it is their own footage).
 function allowedClip(p) {
   if (!p) return null;
+  // Explorer's "Copiar como caminho" wraps the path in quotes; file:/// URLs come from drag and drop
+  p = String(p).trim().replace(/^["']+|["']+$/g, "");
+  if (/^file:\/\//i.test(p)) { try { p = fileURLToPath(p); } catch { return null; } }
   const abs = resolve(p);
   if (!VIDEO_EXT.has(extname(abs).toLowerCase())) return null;
   if (!existsSync(abs) || !statSync(abs).isFile()) return null;
-  if (!isUnder(abs, root) && !isUnder(abs, homedir())) return null;
+  // video files only; the server listens on 127.0.0.1, so any local drive (D:\ etc.) is fine
+  if (!isAbsolute(abs)) return null;
   return abs;
 }
 
@@ -259,6 +263,7 @@ const server = createServer(async (req, res) => {
     if (p === "/api/clip") {
       const abs = allowedClip(url.searchParams.get("path"));
       if (!abs) return notFound(res, "clip not found or not allowed");
+      if (url.searchParams.get("check")) return json(res, 200, { ok: true, path: abs });
       return streamFile(req, res, abs, { "cache-control": "no-store" });
     }
     if (p === "/api/transcript") return json(res, 200, { sample: sampleWords(url.searchParams.get("project")) });
