@@ -23,6 +23,12 @@
         "8765"
       ],
       "port": 8765
+    },
+    {
+      "name": "landing-pages",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "landing-pages", "-l", "5055"],
+      "port": 5055
     }
   ]
 }
