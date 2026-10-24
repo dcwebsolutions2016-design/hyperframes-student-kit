@@ -255,8 +255,10 @@ function layoutStage() {
   drawGuides();
 }
 function drawGuides() {
-  $(".g.head", guides).style.top = UI.headTop + "px";
-  $(".g.cap", guides).style.top = UI.capTop + "px";
+  guides.style.setProperty("--gs", (stage.clientWidth / UI.W) || 0.3);
+  guides.classList.toggle("compact", stage.clientWidth < 220);
+  $(".g.head", guides).style.top = UI.headTop + "px"; $(".g.head em", guides).textContent = Math.round(UI.headTop);
+  $(".g.cap", guides).style.top = UI.capTop + "px"; $(".g.cap em", guides).textContent = Math.round(UI.capTop);
   const sf = $(".g.safe", guides);
   if (UI.landscape) { Object.assign(sf.style, { left: "96px", right: "96px", top: "96px", height: UI.H - 192 + "px" }); }
   else { Object.assign(sf.style, { left: "65px", right: "65px", top: "270px", height: 1248 - 270 + "px" }); }
@@ -779,6 +781,15 @@ stage.classList.add("avatar"); applyBackgrounds();
 $("#detectHead").onclick = () => detectHead();
 $("#autoDetect").onchange = (e) => { try { localStorage.setItem(LS + "autoDetect", e.target.checked ? "1" : "0"); } catch {} };
 try { $("#autoDetect").checked = localStorage.getItem(LS + "autoDetect") !== "0"; } catch {}
+// drag a guide's tag on the stage to move it (same as the sliders)
+$$(".guides .g[data-k] .tag").forEach((tag) => tag.addEventListener("pointerdown", (e) => {
+  e.preventDefault(); e.stopPropagation();
+  const g = tag.parentElement, k = g.dataset.k, slider = $("#" + k), s = stage.clientWidth / UI.W, y0 = e.clientY, v0 = UI[k];
+  g.classList.add("dragging"); tag.setPointerCapture(e.pointerId);
+  const move = (ev) => { UI[k] = Math.round(Math.max(Number(slider.min) || 0, Math.min(Number(slider.max), v0 + (ev.clientY - y0) / s))); syncSliders(); drawGuides(); };
+  const up = () => { g.classList.remove("dragging"); tag.removeEventListener("pointermove", move); tag.removeEventListener("pointerup", up); renderStep(); rebuildMain(); autosave(); };
+  tag.addEventListener("pointermove", move); tag.addEventListener("pointerup", up);
+}));
 $("#headTop").oninput = (e) => { UI.headTop = Number(e.target.value); syncSliders(); drawGuides(); debounce(() => { renderStep(); rebuildMain(); autosave(); }); };
 $("#capTop").oninput = (e) => { UI.capTop = Number(e.target.value); syncSliders(); drawGuides(); debounce(() => { renderStep(); rebuildMain(); autosave(); }); };
 ["hook1", "hook2", "keyword", "note", "comment", "user"].forEach((k) => { $("#" + k).value = UI.text[k]; $("#" + k).oninput = (e) => { UI.text[k] = e.target.value; debounce(() => { renderStep(); rebuildMain(); }); }; });

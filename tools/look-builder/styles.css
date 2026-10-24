@@ -89,14 +89,30 @@ a.tab{text-decoration:none;display:inline-flex;align-items:center}
 .stage .empty b{color:#1D1A16;font:800 16px var(--head)}
 .stage .empty span{font-size:12.5px;max-width:260px;color:#6E665C}
 .stage.has-clip .empty{display:none}
-.guides .g{position:absolute;left:0;right:0;border-top:1px dashed rgba(255,255,255,.4)}
-.guides .g.cap{border-color:rgba(250,230,122,.7)}
-.guides .g.safe{border:2px dashed rgba(229,72,77,.4);border-radius:14px}
-.guides .g.face{border:3px solid rgba(46,158,79,.85);border-radius:18px;left:auto;right:auto;display:none}
-.guides .g::after{position:absolute;right:14px;top:-16px;font:600 20px/32px var(--font);padding:0 14px;border-radius:999px;background:rgba(29,26,22,.75);color:#fff;letter-spacing:.02em;white-space:nowrap}
-.guides .g.head::after{content:"topo da cabeça"}
-.guides .g.cap::after{content:"linha da legenda";background:rgba(250,230,122,.92);color:#1D1A16}
-.guides .g.face::after{content:"rosto";left:auto;right:-4px;top:auto;bottom:-40px;background:rgba(46,158,79,.9);color:#fff}
+/* framing guides: editor-style rulers (cyan head, magenta caption), never part of the render.
+   The layer is scaled to the stage, so sizes divide by --gs to stay a constant screen size. */
+.guides{--gs:.3;--gHead:#3ee0ff;--gCap:#ff4fd8}
+.guides .g{position:absolute;left:0;right:0;height:0;pointer-events:none}
+.guides .g.head,.guides .g.cap{border-top:calc(1px / var(--gs)) dashed var(--gc);box-shadow:0 0 calc(6px / var(--gs)) color-mix(in srgb,var(--gc) 55%,transparent)}
+.guides .g.head{--gc:var(--gHead)}
+.guides .g.cap{--gc:var(--gCap)}
+/* ruler notches on both edges */
+.guides .g.head::before,.guides .g.cap::before,.guides .g.head::after,.guides .g.cap::after{content:"";position:absolute;top:calc(-6px / var(--gs));width:0;height:0;border:calc(6px / var(--gs)) solid transparent}
+.guides .g.head::before,.guides .g.cap::before{left:0;border-left-color:var(--gc)}
+.guides .g.head::after,.guides .g.cap::after{right:0;border-right-color:var(--gc)}
+.guides .tag{position:absolute;left:calc(14px / var(--gs));top:0;transform:translateY(-50%);display:inline-flex;align-items:center;gap:calc(5px / var(--gs));padding:calc(2px / var(--gs)) calc(8px / var(--gs)) calc(2px / var(--gs)) calc(5px / var(--gs));border-radius:calc(5px / var(--gs));background:var(--gc);color:#06121a;font:700 calc(10px / var(--gs))/1.4 var(--mono);letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;box-shadow:0 calc(2px / var(--gs)) calc(8px / var(--gs)) rgba(0,0,0,.45);pointer-events:auto;cursor:ns-resize;user-select:none}
+.guides .tag b{font-weight:700;opacity:.7}
+.guides .tag em{font-style:normal;font-weight:500;opacity:.75;margin-left:calc(2px / var(--gs))}
+.guides .tag em:not(:empty)::after{content:"px"}
+.guides .g.dragging .tag{outline:calc(2px / var(--gs)) solid #fff}
+.guides .g.cap .tag{left:auto;right:calc(14px / var(--gs))}
+.guides .g.safe{border:calc(1px / var(--gs)) dashed rgba(255,255,255,.28);border-radius:calc(4px / var(--gs))}
+.guides .g.safe .tag{top:0;left:calc(6px / var(--gs));transform:translateY(calc(-100% - 3px / var(--gs)));background:rgba(0,0,0,.55);color:rgba(255,255,255,.7);box-shadow:none;pointer-events:none;cursor:default;font-weight:500}
+.guides .g.face{border:calc(1.5px / var(--gs)) solid var(--gHead);border-radius:calc(6px / var(--gs));display:none;background:color-mix(in srgb,var(--gHead) 6%,transparent)}
+.guides.compact .tag{font-size:calc(8px / var(--gs));padding:calc(1px / var(--gs)) calc(5px / var(--gs));left:calc(6px / var(--gs))}
+.guides.compact .g.cap .tag{left:auto;right:calc(6px / var(--gs))}
+.guides.compact .tag em,.guides.compact .tag b,.guides.compact .g.safe .tag{display:none}
+.guides .g.face .tag{--gc:var(--gHead);left:0;top:auto;bottom:0;transform:translateY(calc(100% + 3px / var(--gs)));pointer-events:none;cursor:default}
 .ov{position:absolute;will-change:transform,opacity}
 
 .transport{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
