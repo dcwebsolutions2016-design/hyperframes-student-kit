@@ -746,7 +746,7 @@ $("#clipSelect").onchange = (e) => openClip(e.target.value, e.target.selectedOpt
 // pasted path: strip the quotes Explorer adds, check it on the server, say why when it fails
 async function openPasted() {
   const raw = $("#clipPath").value.trim().replace(/^["']+|["']+$/g, "");
-  if (!raw) { toast("Cole o caminho completo do vídeo, por exemplo C:/Users/voce/Videos/clipe.mp4"); $("#clipPath").focus(); return; }
+  if (!raw) return pickFile();
   if (!/\.(mp4|mov|m4v|webm)$/i.test(raw)) { toast("O caminho precisa terminar em .mp4, .mov, .m4v ou .webm."); return; }
   const r = await fetch(`/api/clip?check=1&path=${encodeURIComponent(raw)}`).then((x) => (x.ok ? x.json() : null)).catch(() => null);
   if (!r) { toast("Não achei esse arquivo. Confira o caminho (pasta e nome) e tente de novo."); return; }
@@ -754,6 +754,20 @@ async function openPasted() {
   const sel = $("#clipSelect"); if ([...sel.options].some((o) => o.value === r.path)) sel.value = r.path; else sel.value = "";
   openClip(r.path, null);
   toast("Clipe aberto.");
+}
+// empty path box: the server opens the system's file dialog (it runs on this PC) and hands back the real path
+async function pickFile() {
+  const btn = $("#clipLoad"); btn.disabled = true; btn.textContent = "Escolhendo…";
+  toast("Abrindo o seletor de arquivo… se não aparecer na frente, veja a barra de tarefas.");
+  try {
+    const r = await fetch("/api/pick", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ start: UI.clip || "" }) }).then((x) => x.json());
+    if (r.error) return toast(r.error);
+    if (!r.path) return toast("Nenhum arquivo escolhido.");
+    $("#clipPath").value = r.path;
+    const sel = $("#clipSelect"); sel.value = [...sel.options].some((o) => o.value === r.path) ? r.path : "";
+    openClip(r.path, null); toast("Clipe aberto.");
+  } catch { toast("Não consegui abrir o seletor. Cole o caminho do vídeo na caixa ao lado."); }
+  finally { btn.disabled = false; btn.textContent = "Abrir…"; }
 }
 $("#clipLoad").onclick = openPasted;
 $("#clipPath").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); openPasted(); } });

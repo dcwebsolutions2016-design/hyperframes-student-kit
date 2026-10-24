@@ -7,7 +7,8 @@ import { createServer } from "node:http";
 import { createReadStream, existsSync, readdirSync, statSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve, join, extname, basename, dirname, relative, isAbsolute, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { homedir } from "node:os";
+import { homedir, platform } from "node:os";
+import { execFile } from "node:child_process";
 import { buildTestProject, runSnapshot, listSnapshots } from "./testbuild.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -132,6 +133,35 @@ function listClips() {
 }
 
 // Full word list for the Edit Review page: transcript.json / raw.json / whisper / silence-transcript / caption-groups.
+// Native "open file" dialog on the user's own machine (the server runs locally). Windows: WinForms OpenFileDialog
+// through an encoded PowerShell command (no script file, so the execution policy does not apply); macOS: osascript;
+// Linux: zenity. Resolves to the chosen absolute path, or null when cancelled.
+function pickVideoFile(startDir) {
+  return new Promise((done) => {
+    const finish = (err, out) => { const p = String(out || "").trim().split(/\r?\n/).pop(); done(!err && p && existsSync(p) ? p : null); };
+    const os = platform();
+    if (os === "win32") {
+      const dir = (startDir && existsSync(startDir) ? startDir : join(homedir(), "Videos")).replace(/'/g, "''");
+      const ps = [
+        "Add-Type -AssemblyName System.Windows.Forms",
+        "[System.Windows.Forms.Application]::EnableVisualStyles()",
+        "$owner = New-Object System.Windows.Forms.Form -Property @{TopMost=$true; ShowInTaskbar=$false; WindowState='Minimized'}",
+        "$owner.Show(); $owner.Hide()",
+        "$d = New-Object System.Windows.Forms.OpenFileDialog",
+        "$d.Title = 'Escolha o video para o Look builder'",
+        "$d.Filter = 'Videos (*.mp4;*.mov;*.m4v;*.webm)|*.mp4;*.mov;*.m4v;*.webm|Todos os arquivos (*.*)|*.*'",
+        `$d.InitialDirectory = '${dir}'`,
+        "if ($d.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::OutputEncoding = [Text.Encoding]::UTF8; Write-Output $d.FileName }",
+      ].join("; ");
+      const enc = Buffer.from(ps, "utf16le").toString("base64");
+      return execFile("powershell.exe", ["-NoProfile", "-STA", "-NonInteractive", "-EncodedCommand", enc], { windowsHide: false, timeout: 10 * 60 * 1000, encoding: "utf8" }, finish);
+    }
+    if (os === "darwin") return execFile("osascript", ["-e", 'POSIX path of (choose file with prompt "Escolha o video" of type {"public.movie"})'], { timeout: 10 * 60 * 1000 }, finish);
+    return execFile("zenity", ["--file-selection", "--title=Escolha o video", "--file-filter=*.mp4 *.mov *.m4v *.webm"], { timeout: 10 * 60 * 1000 }, finish);
+  });
+}
+let picking = false;
+
 function readTranscript(slug) {
   if (!slugOk(slug)) return null;
   const a = join(root, "video-projects", slug, "assets");
@@ -267,6 +297,18 @@ const server = createServer(async (req, res) => {
       return streamFile(req, res, abs, { "cache-control": "no-store" });
     }
     if (p === "/api/transcript") return json(res, 200, { sample: sampleWords(url.searchParams.get("project")) });
+    if (p === "/api/pick" && req.method === "POST") {
+      if (picking) return json(res, 409, { error: "O seletor de arquivo já está aberto (veja a barra de tarefas)." });
+      picking = true;
+      try {
+        const body = JSON.parse(await readBody(req) || "{}");
+        const start = body.start ? dirname(String(body.start).replace(/^["']+|["']+$/g, "")) : null;
+        const path = await pickVideoFile(start);
+        if (!path) return json(res, 200, { path: null });
+        const abs = allowedClip(path);
+        return abs ? json(res, 200, { path: abs }) : json(res, 200, { path: null, error: "Escolha um vídeo .mp4, .mov, .m4v ou .webm." });
+      } finally { picking = false; }
+    }
     // Edit Review page: notes per timestamp + edits list, saved in video-projects/<slug>/review.json (+ REVIEW.md)
     if (p === "/api/review" && req.method === "GET") {
       const slug = url.searchParams.get("project");
