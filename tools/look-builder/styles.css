@@ -393,3 +393,6 @@ a.tab{text-decoration:none;display:inline-flex;align-items:center}
 .el .hole,.el.hole{-webkit-mask:radial-gradient(ellipse var(--hrx,40%) var(--hry,30%) at 50% var(--hy,60%),transparent 60%,#000 80%);mask:radial-gradient(ellipse var(--hrx,40%) var(--hry,30%) at 50% var(--hy,60%),transparent 60%,#000 80%)}
 .matte-on .el .hole,.matte-on .el.hole{-webkit-mask:none;mask:none}
 .matte-on .mnote{display:none!important}
+
+/* the "precisa matte" notes are replaced by the layers + the cut-out toggle */
+.mnote{display:none!important}

@@ -15,7 +15,7 @@ export const LAYER_CSS = `
 .lb-back .back .front,.lb-back .back .front *{visibility:hidden!important}
 .el .hole,.el.hole{-webkit-mask:radial-gradient(ellipse var(--hrx,40%) var(--hry,30%) at 50% var(--hy,60%),transparent 60%,#000 80%);mask:radial-gradient(ellipse var(--hrx,40%) var(--hry,30%) at 50% var(--hy,60%),transparent 60%,#000 80%)}
 .matte-on .el .hole,.matte-on .el.hole{-webkit-mask:none;mask:none}
-.matte-on .mnote{display:none!important}
+.mnote{display:none!important}
 `;
 // inline vars for a .hole backdrop (centre and radii follow the framing)
 export const holeVars = (S) => `--hx:50%;--hy:${S.headTop + 700}px;--hrx:${S.W * 0.44}px;--hry:${S.H * 0.5}px;`;
