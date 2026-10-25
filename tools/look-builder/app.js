@@ -528,8 +528,8 @@ function renderStep() {
     $("#quick").innerHTML = `<button class="preset surprise mini-surprise" id="surprise" title="Um look coerente de uma skill, ao acaso">🎲 Surpreenda-me</button><span class="lbl">ou escolha peça por peça abaixo</span>`;
   } else $("#quick").innerHTML = "";
   if (st.id === "template") setTimeout(fillPresetCards, 0);
-  if (st.id === "captions" && !UI.adv && !isLds()) UI.capFilter = "kit";
-  if (st.id === "captions" && (UI.adv || isLds())) {
+  // Legenda Dinâmica (EffectCraft) is part of the captions step on both paths, never behind "Avançado"
+  if (st.id === "captions") {
     UI.capFilter = UI.capFilter || "all";
     const lds = LDS.available ? `${LDS.prontos.length} prontos · ${LDS.entradas.length} entradas` : "catálogo não encontrado";
     $("#quick").innerHTML = `<span class="lbl">Mostrar:</span>` +
@@ -550,6 +550,8 @@ function renderStep() {
     const tabs = [["texts", "Textos"], ["colours", "Cores"], ["fonts", "Fontes"], ["captions", "Legenda"]];
     $("#quick").innerHTML = `<div class="adj-tabs">${tabs.map(([k, t]) => `<button class="${st.id === k ? "on" : ""}" data-adj="${k}">${t}</button>`).join("")}</div>` + $("#quick").innerHTML;
     $$("#quick [data-adj]").forEach((b) => (b.onclick = () => { UI.adj = b.dataset.adj; renderStep(); }));
+    // the tabs redraw the quick row: re-wire the buttons the reused step drew
+    $$("#quick button[data-f]").forEach((b) => (b.onclick = () => { UI.capFilter = b.dataset.f; renderStep(); }));
   }
   if (st.id === "texts") { $("#grid").innerHTML = textsForm(); wireTextsForm(); return; }
   if (st.id === "template") { $("#grid").innerHTML = ""; $$("#quick button[data-p]").forEach((b) => (b.onclick = () => applyPreset(b.dataset.p))); return; }

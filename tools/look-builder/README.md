@@ -170,8 +170,8 @@ USER_FONTS="C:\caminho\da\pasta" node tools/look-builder/server.mjs
   venda, Motion sem rosto) e a origem (Kit, Ajene, Altra, Zee, Castilho, Ten Fold) aparece só como etiqueta no card.
   "Ajustar" tem abas Textos, Cores, Fontes e Legenda. As duas ações finais são **Ver render de verdade** (com progresso
   por etapa: montando, recortando a pessoa, capturando os quadros) e **Salvar e usar no Claude** (grava e copia o
-  pedido). JSON, copiar o pedido e as opções avançadas (Brand Nat, Legenda Dinâmica, skill e conflitos) ficam no menu
-  **Avançado**.
+  pedido). JSON, copiar o pedido e as opções avançadas (códigos Brand Nat, skill e conflitos) ficam no menu **Avançado**.
+  As Legendas Dinâmicas aparecem sempre no passo Legendas e na aba Legenda do Ajustar.
 - **Edit Review** (`/review?project=<slug>`, botão "Edit Review" no topo do painel): assista o corte do projeto, deixe
   notas por tempo (N), uma lista de edits com tipo, in/out e status (E ou Shift+Enter; "Importar cortes da EDL" traz
   os cortes do cut-silences / cut-mistakes já marcados como feitos), e a transcrição clicável que segue o player.
