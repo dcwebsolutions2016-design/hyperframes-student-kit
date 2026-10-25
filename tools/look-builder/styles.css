@@ -310,7 +310,7 @@ a.tab{text-decoration:none;display:inline-flex;align-items:center}
 .sec-head b{font:800 18px/1 var(--head);letter-spacing:-.03em}
 .sec-head span{color:var(--dim);font-size:13px;flex:1;min-width:160px}
 .sec-head .mini{border:1px solid var(--line);background:var(--bg3);border-radius:999px;padding:5px 12px;font-size:12.5px;font-weight:600;white-space:nowrap}
-.presets.row{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:10px;padding-bottom:6px;scrollbar-width:thin}
+.presets.row{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:10px;padding-bottom:8px}
 .presets.row .preset{flex:0 0 132px;scroll-snap-align:start}
 .presets.row.tpl .preset{flex:0 0 150px}
 .presets.row .preset.big span{-webkit-line-clamp:2}
@@ -396,3 +396,57 @@ a.tab{text-decoration:none;display:inline-flex;align-items:center}
 
 /* the "precisa matte" notes are replaced by the layers + the cut-out toggle */
 .mnote{display:none!important}
+
+/* ---------- two paths: entry screen, template goals, adjust tabs, review actions, advanced menu */
+body.entry .steps,body.entry .progress,body.entry .bottom-nav #next,body.entry .bottom-nav #prev,body.entry .tray-picks,body.entry .extras{visibility:hidden}
+.entry-choices{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:6px}
+.choice{position:relative;text-align:left;display:flex;flex-direction:column;gap:10px;padding:28px 26px;border-radius:var(--r-lg);background:var(--bg3);border:1.5px solid var(--line);color:var(--fg);transition:border-color var(--t),transform var(--t),box-shadow var(--t)}
+.choice:hover{border-color:var(--acc);transform:translateY(-2px);box-shadow:var(--shadow-lg)}
+.choice b{font:800 26px/1.1 var(--head);letter-spacing:-.02em}
+.choice span{color:var(--dim);font-size:15px;line-height:1.5}
+.choice em{font-style:normal;font:600 12px var(--mono);letter-spacing:.06em;color:var(--faint);margin-top:auto}
+.choice.rec{border-color:color-mix(in srgb,var(--acc) 60%,var(--line))}
+.choice .badge{position:absolute;top:16px;right:16px;font:700 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;padding:4px 10px;border-radius:999px;background:var(--acc);color:var(--acc-ink)}
+.sec-head b small{font:600 12px var(--mono);color:var(--faint);margin-left:6px}
+.preset{position:relative}
+.preset .src{position:absolute;top:8px;left:8px;z-index:3;font:700 10px var(--mono);letter-spacing:.08em;text-transform:uppercase;font-style:normal;padding:3px 8px;border-radius:999px;background:rgba(0,0,0,.6);color:#fff;pointer-events:none}
+.mini-surprise{display:inline-flex !important;flex-direction:row !important;align-items:center;gap:8px;padding:8px 16px !important;border-radius:999px !important;width:auto !important;font-weight:700}
+.adj-tabs{display:flex;gap:6px;flex-wrap:wrap;width:100%;margin-bottom:8px}
+.adj-tabs button{padding:8px 16px;border-radius:999px;background:var(--bg3);border:1px solid var(--line);color:var(--dim);font-weight:700}
+.adj-tabs button.on{background:var(--acc);border-color:var(--acc);color:var(--acc-ink)}
+.texts-form{display:grid;gap:12px;max-width:640px}
+.texts-form label{display:grid;gap:6px}
+.texts-form label span{font-weight:600;font-size:13px;color:var(--dim)}
+.texts-form input{background:var(--bg3);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:15px}
+.review .actions{grid-column:1/-1;border-color:color-mix(in srgb,var(--acc) 50%,var(--line))}
+.next-steps{list-style:none;margin:0;padding:0;display:grid;gap:12px;counter-reset:ns}
+.next-steps li{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.next-steps li::before{counter-increment:ns;content:counter(ns);width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--chip);font:700 13px var(--mono);color:var(--dim)}
+.next-steps li span{color:var(--dim);flex:1;min-width:220px}
+.adv-box summary{cursor:pointer;font-weight:700}
+body:not(.adv) .adv-only{display:none}
+.adv-menu{position:relative}
+.adv-menu>summary{list-style:none;cursor:pointer}
+.adv-menu>summary::-webkit-details-marker{display:none}
+.adv-pop{position:absolute;right:0;top:calc(100% + 8px);z-index:50;min-width:300px;display:grid;gap:4px;padding:10px;border-radius:16px;background:var(--bg3);border:1px solid var(--line2);box-shadow:var(--shadow-lg)}
+.adv-pop>button{text-align:left;background:none;border:0;padding:9px 12px;border-radius:10px;color:var(--fg);font-weight:600;box-shadow:none}
+.adv-pop>button:hover,.adv-pop>button.on{background:var(--chip);color:var(--fg)}
+.adv-pop label{display:grid;grid-template-columns:auto 1fr;gap:2px 8px;padding:10px 12px;border-top:1px solid var(--line);margin-top:4px;font-weight:600}
+.adv-pop label small{grid-column:2;color:var(--dim);font-weight:500;font-size:12px}
+.test-progress ol{list-style:none;margin:0 0 10px;padding:0;display:grid;gap:10px}
+.test-progress li{display:flex;align-items:center;gap:12px;color:var(--faint)}
+.test-progress li i{width:18px;height:18px;border-radius:50%;border:2px solid var(--line3);flex:none}
+.test-progress li.done{color:var(--dim)}
+.test-progress li.done i{background:var(--ok);border-color:var(--ok)}
+.test-progress li.now{color:var(--fg);font-weight:700}
+.test-progress li.now i{border-color:var(--acc);border-top-color:transparent;animation:spin 0.9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ---------- scrollbars: thin, in the panel's palette (no white system bar) */
+*{scrollbar-width:thin;scrollbar-color:var(--line3) transparent}
+.panel:hover,.preview:hover,.grid:hover,.presets.row:hover,.rv-list:hover,.rv-words:hover,.test-body:hover{scrollbar-color:color-mix(in srgb,var(--acc) 70%,var(--line3)) transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track,::-webkit-scrollbar-corner{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--line3);border-radius:999px;border:3px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:var(--acc);background-clip:padding-box}
+::-webkit-scrollbar-button{display:none;width:0;height:0}

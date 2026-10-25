@@ -10,8 +10,8 @@
 <body>
 <header class="top">
   <div class="top-row">
-    <div class="brand"><b>Look builder</b><span class="h">your look.</span><span class="sub">Monte o look passo a passo. Cada passo usa o que você escolheu antes.</span></div>
-    <div class="tabs"><button class="tab on" data-view="look">Look</button><button class="tab" data-view="json">JSON</button><a class="tab" id="toReview" href="/review" title="Edit Review: notas por tempo, edits e transcrição do corte">Edit Review</a><button class="tab" id="copyJson" title="Copiar look.json">⧉ copiar</button><button class="tab" id="theme" title="Claro / escuro">◐</button><button class="tab danger" id="reset" title="Limpar todas as escolhas">Limpar</button></div>
+    <div class="brand"><b>Look builder</b><span class="h">your look.</span><span class="sub">Escolha o visual do seu vídeo vendo ele no seu próprio clipe.</span></div>
+    <div class="tabs"><button class="tab" id="switchPath" title="Trocar entre Usar um template e Montar do zero">Trocar caminho</button><a class="tab" id="toReview" href="/review" title="Assista o corte, deixe notas por tempo e acompanhe os edits">Revisar vídeo</a><details class="adv-menu" id="advMenu"><summary class="tab">Avançado ▾</summary><div class="adv-pop"><button class="tab on" data-view="look">Ver o look</button><button class="tab" data-view="json">Ver o JSON</button><button id="copyJson">⧉ Copiar o JSON</button><button id="copyPrompt">⧉ Copiar o pedido para o Claude</button><label class="chk"><input type="checkbox" id="advToggle"> Mostrar opções avançadas<small>códigos Brand Nat, Legenda Dinâmica (EffectCraft), skill e conflitos</small></label></div></details><button class="tab" id="theme" title="Claro / escuro">◐</button><button class="tab danger" id="reset" title="Limpar todas as escolhas">Limpar</button></div>
   </div>
   <nav class="steps" id="steps" aria-label="Passos"></nav>
   <div class="progress"><i id="progressBar"></i></div>
@@ -85,16 +85,15 @@
   <div class="bottom-nav"><button class="btn" id="prev" title="Voltar"><span class="ic">←</span><span class="tx">Voltar</span></button><div class="tray-picks" id="trayPicks"></div><span class="extras" id="extras">0 extras</span><button class="btn primary" id="next"><span class="tx">Próximo</span><span class="ic">→</span></button></div>
   <div class="save-row">
     <label class="slug-wrap"><span>video-projects/</span><input id="slug" placeholder="meu-reel" spellcheck="false"></label>
-    <button class="btn" id="copyPrompt" title="Copia o prompt pronto para o Claude"><span class="ic">⧉</span><span class="tx">Copiar prompt</span></button>
-    <button class="btn" id="save" title="Grava look.json e LOOK.md no projeto"><span class="ic">💾</span><span class="tx">Salvar look.json</span></button>
-    <button class="btn test" id="testReal" title="Monta uma composição HyperFrames com este look e captura frames reais (≈1 min)"><span class="ic">▶</span><span class="tx">Testar de verdade</span></button>
+    <button class="btn test" id="testReal" title="Renderiza um trecho do seu clipe com o HyperFrames, igual vai ficar"><span class="ic">▶</span><span class="tx">Ver render de verdade</span></button>
+    <button class="btn primary" id="save" title="Grava o look no projeto e copia o pedido para o Claude"><span class="ic">✓</span><span class="tx">Salvar e usar no Claude</span></button>
   </div>
 </footer>
 <div class="toast" id="toast"></div>
 
 <dialog id="testDlg" class="test-dlg">
-  <header><div><b>Testar de verdade</b><span id="testSub">Composição HyperFrames real, frames capturados com <code>hyperframes snapshot</code>.</span></div><button class="btn sm" id="testClose">Fechar</button></header>
-  <div class="test-body" id="testBody"><p class="test-wait">Montando o projeto de teste e capturando frames… no seu PC pode levar um minuto.</p></div>
+  <header><div><b>Render de verdade</b><span id="testSub">Um trecho do seu clipe renderizado pelo HyperFrames, do jeito que vai ficar.</span></div><button class="btn sm" id="testClose">Fechar</button></header>
+  <div class="test-body" id="testBody"></div>
   <footer><span class="hint" id="testPath"></span><span class="hint">Trecho do clipe a partir do tempo atual do player. Projeto de teste em <code>video-projects/&lt;slug&gt;/look-test/</code>.</span></footer>
 </dialog>
 

@@ -33,7 +33,7 @@ const capById = (id) => byId(allCaptions(), id);
 const isLds = () => typeof L.captions === "string" && L.captions.startsWith("lds:");
 async function loadLds() {
   try { Object.assign(LDS, await fetch("/api/lds").then((x) => x.json())); } catch { LDS.available = false; }
-  if (LDS.available) { STEPS[3].help += " As \"Legenda Dinâmica\" rodam no EffectCraft (plugin do Carlos): palavra-chave gigante, conectivos pequenos, entrada palavra por palavra."; if (UI.step === 3 || UI.step === 5) renderStep(); }
+  if (LDS.available) { FREE_STEPS[3].help += " As \"Legenda Dinâmica\" rodam no EffectCraft (plugin do Carlos): palavra-chave gigante, conectivos pequenos, entrada palavra por palavra."; if (UI.mode) renderStep(); }
 }
 
 // ------------------------------------------------------------------ state
@@ -42,17 +42,83 @@ const UI = {
   step: 0, clip: null, clipProject: null, W: 1080, H: 1920, landscape: false, headTop: 620, capTop: 1150, poster: "",
   text: { hook1: "Larguei meu emprego?", hook2: "a parte que ninguém conta", words: "isso era o sonho de verdade e ninguém fala".split(" "), keyword: "sonho", note: "eu quase desisti aqui", comment: "quero esse estilo! como faz?", user: "seu_usuario" },
 };
-const STEPS = [
-  { id: "colours", title: "Cores", help: "Escolha a paleta. Cada passo depois desse usa essas cores. Comece rápido com um preset (um look pronto de uma skill) ou do zero." },
+const FREE_STEPS = [
+  { id: "colours", title: "Cores", help: "Escolha a paleta. Cada passo depois desse usa essas cores." },
   { id: "fonts", title: "Fontes", help: "Escolha as fontes. Elas vão para o gancho, as legendas, os cards e o motion. Quer outra combinação? Pegue a mais próxima e peça em \"Mais como essa\"." },
   { id: "hook", title: "Gancho", help: "O gancho é o título grande sobre os primeiros 3 segundos. Ele segura o scroll." },
   { id: "captions", title: "Legendas", help: "Como a fala aparece na tela, o vídeo inteiro." },
   { id: "elements", title: "Elementos", help: "Marque todo elemento que você quer nos seus vídeos. Mostrados nas suas cores e fontes." },
   { id: "motion", title: "Motion", help: "Marque o motion que você quer. Desenhado ao vivo nas suas cores e fontes. O primeiro marcado é a entrada padrão dos elementos." },
-  { id: "review", title: "Revisão", help: "Confira, escolha a skill que vai executar, resolva conflitos e salve o look.json no projeto." },
+  { id: "review", title: "Testar e salvar", help: "Veja o render de verdade, confira o look e salve. Depois é só colar o pedido no Claude." },
 ];
+const TPL_STEPS = [
+  { id: "template", title: "Template", help: "Escolha um formato pronto. Passe o mouse para ver a animação no seu clipe; clique para usar." },
+  { id: "adjust", title: "Ajustar", help: "Opcional. Troque os textos de exemplo, as cores, as fontes ou a legenda. O resto do template continua igual." },
+  { id: "review", title: "Testar e salvar", help: "Veja o render de verdade e salve. Depois é só colar o pedido no Claude." },
+];
+let STEPS = FREE_STEPS;
 
 let mainTl = null, cardTls = [];
+// Two ways in: a ready template (3 steps) or building piece by piece (7 steps). The choice is remembered.
+function setMode(m, { quiet = false } = {}) {
+  UI.mode = m; STEPS = m === "free" ? FREE_STEPS : TPL_STEPS; UI.step = 0;
+  document.body.classList.toggle("entry", !m);
+  try { m ? localStorage.setItem("look-builder:mode", m) : localStorage.removeItem("look-builder:mode"); } catch {}
+  if (!quiet) { renderStep(); autosave(); }
+}
+// what each template is FOR (the source only shows as a small tag on the card)
+const GOALS = [
+  ["talk", "Reel falado", "Você na tela, com legenda, cards e cortes por cima."],
+  ["explain", "Explicativo e aula", "Painéis, diagramas, listas e documento: para ensinar algo."],
+  ["sell", "Anúncio e venda", "Produto, oferta e chamada para ação."],
+  ["motion", "Motion sem rosto", "Só animação e tipografia, sem precisar aparecer."],
+];
+const GOAL_OF = {
+  anuncio: "sell", "vsl-roxo": "sell", "vsl-clean": "sell", "alt-produto-lavanda": "sell", "alt-streaming": "sell", "tpl-business-reels": "sell", "alt-balao-retencao": "sell",
+  explicativo: "explain", vox: "explain", aurora: "explain", "tpl-explainer-panel": "explain", "tpl-glass-explainer": "explain", "tpl-split-reel": "explain", "tpl-educational-youtube": "explain", "tpl-split-screen-document": "explain", "tpl-coaching-call-clips": "explain", "tpl-lesson-doc": "explain", "tpl-tips-breakdown": "explain", "tpl-ear-to-ear": "explain", "tpl-ranking-format": "explain", "tpl-top5": "explain", "tpl-if-then": "explain", "tpl-this-vs-that": "explain", "tpl-rapid-list": "explain", "tpl-depth-ui": "explain", "tpl-youtube-clips": "explain",
+  "alt-bokeh-quente": "motion", "alt-manifesto-ia": "motion", "alt-gravura-editorial": "motion", "alt-faixas-cineticas": "motion", "tpl-cinematic-type": "motion",
+};
+const goalOf = (p) => GOAL_OF[p.id] || "talk";
+const SOURCE = { "ajene-templates": "Ajene", "altra-labs": "Altra", tenfold: "Ten Fold", "zee-effects": "Zee", "castilho-35": "Castilho", "brand-nat": "Brand Nat" };
+const sourceOf = (p) => SOURCE[p.skill] || "Kit";
+function renderEntry() {
+  killCards();
+  document.body.classList.add("entry");
+  $("#stepKicker").textContent = "Comece aqui"; $("#stepNum").textContent = "→"; $("#stepTitle").textContent = "Como você quer começar?";
+  $("#stepHelp").textContent = "Dá para trocar de caminho depois, no botão \"Trocar caminho\" lá em cima.";
+  $("#picks").innerHTML = ""; $("#quick").innerHTML = ""; $("#steps").innerHTML = ""; $("#progressBar").style.width = "0";
+  $("#grid").innerHTML = `<div class="entry-choices">
+    <button class="choice rec" data-mode="tpl"><span class="badge">recomendado</span><b>Usar um template</b><span>Escolha um formato pronto, veja ele no seu clipe, ajuste os textos e teste. Três passos.</span><em>Template → Ajustar → Testar e salvar</em></button>
+    <button class="choice" data-mode="free"><b>Montar do zero</b><span>Escolha cada peça: cores, fontes, gancho, legenda, elementos e motion. Para quem quer controlar tudo.</span><em>7 passos</em></button>
+  </div>`;
+  $$("#grid [data-mode]").forEach((b) => (b.onclick = () => setMode(b.dataset.mode)));
+  renderPicks();
+}
+// template step: one row per goal; hover plays, click applies
+function templateSections() {
+  UI.open = UI.open || {};
+  const visible = PRESETS.filter((p) => p.skill && (UI.adv || p.skill !== "brand-nat"));
+  return GOALS.map(([k, title, sub]) => {
+    const list = visible.filter((p) => goalOf(p) === k); if (!list.length) return "";
+    return `<div class="sec-head"><b>${title} <small>${list.length}</small></b><span>${sub}</span><button class="mini" data-open="${k}">${UI.open[k] ? "Ver menos ▴" : "Ver todos ▾"}</button></div><div class="presets tpl ${UI.open[k] ? "" : "row"}">${list.map((p) => presetCard(p, true)).join("")}</div>`;
+  }).join("");
+}
+// "Ajustar" tab with the sample texts (the same values as the side panel inputs)
+function textsForm() {
+  const f = [["hook1", "Gancho, linha 1"], ["hook2", "Gancho, linha 2"], ["words", "Frase das legendas"], ["keyword", "Palavra-chave (destaque)"], ["user", "Seu @ ou marca"]];
+  return `<div class="texts-form" style="grid-column:1/-1">${f.map(([k, t]) => `<label><span>${t}</span><input data-k="${k}" value="${esc(k === "words" ? UI.text.words.join(" ") : UI.text[k] ?? "")}"></label>`).join("")}<p class="hint">Esses textos só servem para você ver o look. No vídeo de verdade entram a sua fala e os seus textos.</p></div>`;
+}
+function wireTextsForm() {
+  $$(".texts-form input").forEach((i) => (i.oninput = () => { const k = i.dataset.k; if (k === "words") UI.text.words = i.value.trim().split(/\s+/).filter(Boolean).slice(0, 14); else UI.text[k] = i.value; syncTextInputs(); debounce(() => { rebuildMain(); autosave(); }); }));
+}
+// live progress of "Ver render de verdade" (the server reports the stage it is in)
+function progressHtml(p, hasBack) {
+  const stages = [["build", "Montando o projeto de teste"], ...(hasBack ? [["matte", "Recortando a pessoa (só na primeira vez de cada trecho)"]] : []), ["snap", "Capturando os quadros com o HyperFrames"]];
+  const cur = p && p.stage ? stages.findIndex(([k]) => k === p.stage) : 0;
+  const sec = p && p.elapsed ? Math.round(p.elapsed / 1000) : 0;
+  return `<div class="test-progress"><ol>${stages.map(([k, t], i) => `<li class="${i < cur ? "done" : i === cur ? "now" : ""}"><i></i>${t}${i === cur && p && p.pct != null ? ` <b>${p.pct}%</b>` : ""}</li>`).join("")}</ol><p class="hint">${sec ? `${sec} s` : "começando…"}${hasBack ? " · o recorte da pessoa pode levar alguns minutos na primeira vez" : " · costuma levar uns 30 segundos"}</p></div>`;
+}
+
 const video = $("#video"), stage = $("#stage"), world = $("#world"), worldBack = $("#worldBack"), cam = $("#cam"), camFg = $("#camFg"), guides = $("#guides");
 
 // ------------------------------------------------------------------ derived style state for renderers
@@ -140,7 +206,7 @@ function syncTextInputs() {
 function resetAll() {
   Object.assign(L, { preset: null, skill: null, colours: null, fonts: null, userFonts: {}, hook: null, captions: null, ldsEntrada: null, elements: [], motion: [], finishes: [], extras: [], notes: "" });
   try { if (UI.clip) localStorage.removeItem(LS + UI.clip); } catch {}
-  UI.step = 0; renderStep(); rebuildMain(); toast("Look limpo.");
+  UI.step = 0; setMode(null, { quiet: true }); renderStep(); rebuildMain(); toast("Look limpo. Escolha como começar.");
 }
 // A coherent random look: one skill, only options native to it.
 function surprise() {
@@ -275,11 +341,11 @@ function syncSliders() {
 
 // ------------------------------------------------------------------ steps nav
 function renderNav() {
-  const counts = { colours: L.colours ? 1 : 0, fonts: L.fonts ? 1 : 0, hook: L.hook ? 1 : 0, captions: L.captions ? 1 : 0, elements: L.elements.length, motion: L.motion.length, review: 0 };
+  const counts = { colours: L.colours ? 1 : 0, fonts: L.fonts ? 1 : 0, hook: L.hook ? 1 : 0, captions: L.captions ? 1 : 0, elements: L.elements.length, motion: L.motion.length, review: 0, template: L.preset ? 1 : 0, adjust: 0 };
   $("#steps").innerHTML = STEPS.map((s, i) => `<button class="${i === UI.step ? "on" : ""} ${counts[s.id] ? "done" : ""}" data-i="${i}"><span class="n">${i + 1}</span><span class="tt">${s.title}</span>${counts[s.id] > 1 ? `<span class="cnt">${counts[s.id]}</span>` : ""}</button>`).join("");
   $$("#steps button").forEach((b) => (b.onclick = () => go(Number(b.dataset.i))));
   $("#prev").disabled = UI.step === 0;
-  const nx = $("#next .tx"); if (nx) nx.textContent = UI.step === STEPS.length - 1 ? "Salvar look.json" : `Próximo: ${STEPS[UI.step + 1].title}`;
+  const nx = $("#next .tx"); if (nx) nx.textContent = UI.step === STEPS.length - 1 ? "Salvar e usar no Claude" : `Próximo: ${STEPS[UI.step + 1].title}`;
   $("#extras").textContent = `${L.extras.length} extra${L.extras.length === 1 ? "" : "s"} pedido${L.extras.length === 1 ? "" : "s"}`;
 }
 function renderPicks() {
@@ -290,9 +356,9 @@ function renderPicks() {
   ].filter(Boolean);
   $("#picks").innerHTML = items.map(([k, v, i]) => `<button data-i="${i}" title="Ir para ${k}"><i></i>${k}: <b>${esc(v)}</b></button>`).join("");
   const tray = $("#trayPicks"); if (tray) tray.innerHTML = items.length ? items.map(([k, v]) => `<span class="code">${esc(k)} · ${esc(v)}</span>`).join("") : `<span class="code" style="opacity:.6">nada escolhido ainda</span>`;
-  $$("#picks button").forEach((b) => (b.onclick = () => go(Number(b.dataset.i))));
+  $$("#picks button").forEach((b) => (b.onclick = () => { if (UI.mode === "tpl") { const k = ["colours", "fonts", null, "captions"][Number(b.dataset.i)]; if (k) UI.adj = k; go(k ? 1 : 0); } else go(Number(b.dataset.i)); }));
 }
-function go(i) { UI.step = Math.max(0, Math.min(STEPS.length - 1, i)); renderStep(); autosave(); }
+function go(i) { if (!UI.mode) return; UI.step = Math.max(0, Math.min(STEPS.length - 1, i)); renderStep(); autosave(); }
 $("#prev").onclick = () => go(UI.step - 1);
 $("#next").onclick = () => (UI.step === STEPS.length - 1 ? save() : go(UI.step + 1));
 
@@ -352,7 +418,7 @@ function presetCard(p, big = false) {
     : p.live ? `<div class="pframe live" style="padding-bottom:177.8%"><div class="cam" style="background-image:url(${posterUrl()})"></div><div class="world" style="width:${UI.W}px;height:${UI.H}px"></div><i class="play">▶</i></div>`
     : `<div class="pframe has-sketch ${WIDE.has(p.id) ? "wide" : ""}" style="padding-bottom:${WIDE.has(p.id) ? 56.25 : 177.8}%"><div class="sk">${MOCK_KIND[p.id] ? mockupHtml(MOCK_KIND[p.id], WIDE.has(p.id)) : sketchFor(p, (byId(COLOURS, p.picks.colours) || COLOURS[0]).vars.acc, isLds() ? L.captions : null)}</div><div class="cam" style="background-image:url(${posterUrl()})"></div><div class="world" style="width:${UI.W}px;height:${UI.H}px"></div><i class="play">▶</i></div>`;
   const acc = p.picks.colours ? (byId(COLOURS, p.picks.colours) || {}).vars?.acc || "#333" : "#333";
-  return `<button class="preset ${big ? "big" : ""} ${L.preset === p.id ? "on" : ""}" data-p="${p.id}" title="${esc(p.desc)}" style="--pacc:${acc}">${frame}<b>${esc(p.name)}<small>${p.skill ? (WIDE.has(p.id) ? "16:9" : "9:16") : ""}</small></b><span>${esc(big ? p.desc : p.skill ? (SKILLS[p.skill] || {}).name || p.skill : "nada marcado")}</span></button>`;
+  return `<button class="preset ${big ? "big" : ""} ${L.preset === p.id ? "on" : ""}" data-p="${p.id}" title="${esc(p.desc)}" style="--pacc:${acc}">${frame}<b>${esc(p.name)}<small>${p.skill ? (WIDE.has(p.id) || p.landscape ? "16:9" : "9:16") : ""}</small></b><span>${esc(big ? p.desc : p.skill ? (SKILLS[p.skill] || {}).name || p.skill : "nada marcado")}</span>${p.skill ? `<em class="src">${esc(sourceOf(p))}</em>` : ""}</button>`;
 }
 // Static mini preview (hook + first caption word + first element); on hover the card plays a short loop.
 function presetScene(p) {
@@ -440,27 +506,30 @@ const entrance = (id) => byId(MOTIONS, id) || byId(MOTIONS, "blur-rise");
 
 // ------------------------------------------------------------------ step renderers
 function renderStep() {
+  if (!UI.mode) return renderEntry();
+  document.body.classList.remove("entry");
+  UI.step = Math.max(0, Math.min(UI.step || 0, STEPS.length - 1));
   killCards();
-  const st = STEPS[UI.step];
+  const st0 = STEPS[UI.step];
+  // "Ajustar" (template path) reuses the colours / fonts / captions steps as tabs, plus a texts form
+  const st = st0.id === "adjust" ? { ...st0, id: UI.adj || "texts" } : st0;
   renderNav();
-  $("#stepKicker").textContent = `Passo ${UI.step + 1} de 7`;
+  $("#stepKicker").textContent = `${UI.mode === "tpl" ? "Template" : "Do zero"} · passo ${UI.step + 1} de ${STEPS.length}`;
   $("#stepNum").textContent = String(UI.step + 1).padStart(2, "0");
-  $("#stepTitle").textContent = st.title;
+  $("#stepTitle").textContent = st0.title;
   $("#progressBar").style.width = `${((UI.step + 1) / STEPS.length) * 100}%`;
   renderPicks();
-  $("#stepHelp").textContent = st.help;
+  $("#stepHelp").textContent = st0.help;
   const grid = $("#grid"); grid.classList.toggle("wide", UI.landscape || st.id === "review");
-  if (UI.step === 0) {
-    const isTpl = (p) => /^(tpl|tf)-/.test(p.id);
-    const kit = PRESETS.filter((p) => !isTpl(p)), tpl = PRESETS.filter(isTpl);
-    UI.open = UI.open || {};
-    const sec = (key, title, sub, cards, cls) => `<div class="sec-head"><b>${title}</b><span>${sub}</span><button class="mini" data-open="${key}">${UI.open[key] ? "Ver menos ▴" : "Ver todos ▾"}</button></div><div class="presets ${cls} ${UI.open[key] ? "" : "row"}">${cards}</div>`;
-    $("#quick").innerHTML = sec("kit", `Começo rápido`, `Looks das skills do kit. Passe o mouse para ver a animação; clique para aplicar.`, kit.map((p) => presetCard(p)).join("") + `<button class="preset surprise" id="surprise" title="Um look coerente de uma skill, ao acaso"><div class="pframe dice">🎲</div><b>Surpreenda-me</b><span>look coerente, ao acaso</span></button>`, "")
-      + sec("tpl", `Templates <i class="serif">nossa versão</i>`, `${tpl.length} formatos inteiros inspirados nos pacotes gringos${isLds() ? " · com a sua Legenda Dinâmica" : ""}.`, tpl.map((p) => presetCard(p, true)).join(""), "tpl");
+  if (st.id === "template") {
+    $("#quick").innerHTML = templateSections();
     $$("#quick button[data-open]").forEach((b) => (b.onclick = () => { UI.open[b.dataset.open] = !UI.open[b.dataset.open]; renderStep(); }));
+  } else if (UI.mode === "free" && UI.step === 0) {
+    $("#quick").innerHTML = `<button class="preset surprise mini-surprise" id="surprise" title="Um look coerente de uma skill, ao acaso">🎲 Surpreenda-me</button><span class="lbl">ou escolha peça por peça abaixo</span>`;
   } else $("#quick").innerHTML = "";
-  if (UI.step === 0) setTimeout(fillPresetCards, 0);
-  if (st.id === "captions") {
+  if (st.id === "template") setTimeout(fillPresetCards, 0);
+  if (st.id === "captions" && !UI.adv && !isLds()) UI.capFilter = "kit";
+  if (st.id === "captions" && (UI.adv || isLds())) {
     UI.capFilter = UI.capFilter || "all";
     const lds = LDS.available ? `${LDS.prontos.length} prontos · ${LDS.entradas.length} entradas` : "catálogo não encontrado";
     $("#quick").innerHTML = `<span class="lbl">Mostrar:</span>` +
@@ -470,13 +539,20 @@ function renderStep() {
   }
   if (st.id === "elements" || st.id === "motion") {
     UI.flt = UI.flt || { q: "", fam: "all" };
-    const fams = [["all", "Todos"], ["oney", "Oney"], ["zee-effects", "Zee"], ["castilho-35", "35 efeitos"], ["lib", "style-library"], ["ajene-templates", "Templates"], ["altra-labs", "Altra"], ["tenfold", "Ten Fold"], ...(BN.available ? [["brand-nat", "Brand Nat"]] : [])];
+    const fams = [["all", "Todos"], ["oney", "Oney"], ["zee-effects", "Zee"], ["castilho-35", "35 efeitos"], ["lib", "style-library"], ["ajene-templates", "Templates"], ["altra-labs", "Altra"], ["tenfold", "Ten Fold"], ...(BN.available && UI.adv ? [["brand-nat", "Brand Nat"]] : [])];
     const all = { elements: ELEMENTS, motion: MOTIONS }[st.id];
-    const cnt = (k) => all.filter((o) => k === "all" || (k === "oney" ? (o.skills || []).some((s) => /oney|vsl/.test(s)) : k === "lib" ? (o.skills || []).some((s) => /kallaway|vox/.test(s)) : (o.skills || []).includes(k))).length;
+    const cnt = (k) => all.filter((o) => (UI.adv || !o.code) && (k === "all" || (k === "oney" ? (o.skills || []).some((s) => /oney|vsl/.test(s)) : k === "lib" ? (o.skills || []).some((s) => /kallaway|vox/.test(s)) : (o.skills || []).includes(k)))).length;
     $("#quick").innerHTML = `<span class="lbl">Mostrar:</span>` + fams.map(([k, t]) => `<button class="${UI.flt.fam === k ? "on" : ""}" data-fam="${k}">${t} <small>${cnt(k)}</small></button>`).join("") + `<input id="fltSearch" placeholder="buscar… (ex.: celular, carimbo, zoom)" value="${esc(UI.flt.q)}" spellcheck="false">`;
     $$("#quick button[data-fam]").forEach((b) => (b.onclick = () => { UI.flt.fam = b.dataset.fam; renderStep(); }));
     const si = $("#fltSearch"); si.oninput = () => { clearTimeout(si._t); si._t = setTimeout(() => { UI.flt.q = si.value.trim(); const pos = si.selectionStart; renderStep(); const n = $("#fltSearch"); if (n) { n.focus(); n.setSelectionRange(pos, pos); } }, 220); };
   }
+  if (st0.id === "adjust") {
+    const tabs = [["texts", "Textos"], ["colours", "Cores"], ["fonts", "Fontes"], ["captions", "Legenda"]];
+    $("#quick").innerHTML = `<div class="adj-tabs">${tabs.map(([k, t]) => `<button class="${st.id === k ? "on" : ""}" data-adj="${k}">${t}</button>`).join("")}</div>` + $("#quick").innerHTML;
+    $$("#quick [data-adj]").forEach((b) => (b.onclick = () => { UI.adj = b.dataset.adj; renderStep(); }));
+  }
+  if (st.id === "texts") { $("#grid").innerHTML = textsForm(); wireTextsForm(); return; }
+  if (st.id === "template") { $("#grid").innerHTML = ""; $$("#quick button[data-p]").forEach((b) => (b.onclick = () => applyPreset(b.dataset.p))); return; }
   $$("#quick button[data-p]").forEach((b) => (b.onclick = () => applyPreset(b.dataset.p)));
   const sp = $("#surprise"); if (sp) sp.onclick = surprise;
   const s = S();
@@ -489,6 +565,7 @@ function renderStep() {
     const q = UI.flt.q.toLowerCase();
     list = list.filter((o) => (inFam(o) || L[st.id].includes(o.id)) && (!q || `${o.name} ${o.desc || ""}`.toLowerCase().includes(q)));
   }
+  if (!UI.adv && list) list = list.filter((o) => !o.code || (Array.isArray(L[st.id]) ? L[st.id].includes(o.id) : L[st.id] === o.id));
   let ldsItems = [];
   let html = list.map((o, i) => card({
     idx: i + 1, id: o.id, name: o.name, desc: o.sub || o.desc, skills: o.skills, multi, step: st.id,
@@ -761,13 +838,17 @@ function renderReview(grid) {
   const skill = guessSkill(); const cf = conflicts(skill); const j = lookJson();
   const row = (k, v) => `<li><b>${k}:</b> ${v || "<em style='color:var(--faint)'>não escolhido</em>"}</li>`;
   grid.innerHTML = `<div class="review" style="grid-column:1/-1">
+    <div class="box actions"><h3>Agora</h3><ol class="next-steps">
+      <li><button class="btn test" data-act="test"><span class="ic">▶</span>Ver render de verdade</button><span>Renderiza um trecho do seu clipe com o HyperFrames, igual vai ficar. ${UI.hasBack ? "Na primeira vez, o recorte da pessoa leva alguns minutos." : "Uns 30 segundos."}</span></li>
+      <li><button class="btn primary" data-act="save"><span class="ic">✓</span>Salvar e usar no Claude</button><span>Grava o look no projeto <code>video-projects/${esc($("#slug").value || "meu-reel")}</code> e copia o pedido. Cole no Claude junto com o seu vídeo.</span></li>
+    </ol></div>
     <div class="box"><h3>Seu look</h3><ul>
       ${row("Cores", j.colours?.name)}${row("Fontes", j.fonts?.name)}${row("Gancho", j.hook?.name)}${row("Legendas", j.captions ? j.captions.name + (j.captions.lds ? ` <em style="color:var(--dim)">(EffectCraft · entrada ${esc(j.captions.lds.entradaName || j.captions.lds.entradaPadrao)})</em>` : "") : null)}
       ${row("Elementos", j.elements.map((x) => x.name).join(", "))}${row("Motion", j.motion.map((x) => x.name).join(", "))}
       ${row("Enquadramento", `cabeça ${UI.headTop}px · legenda ${UI.capTop}px · ${j.orientation}`)}</ul>
       ${L.extras.length ? `<h3 style="margin-top:14px">Variações pedidas</h3><ul>${L.extras.map((e, i) => `<li>${esc(e.base)} → ${esc(e.ask)} <a href="#" data-x="${i}">remover</a></li>`).join("")}</ul>` : ""}
     </div>
-    <div class="box"><h3>Skill que vai executar</h3>
+    <div class="box ${UI.adv ? "" : "adv-only"}"><h3>Skill que vai executar</h3>
       <div class="skillpick">${Object.entries(SKILLS).map(([k, v]) => `<button class="${k === skill ? "on" : ""}" data-s="${k}">${esc(v.name)}</button>`).join("")}</div>
       <p style="color:var(--dim);margin:10px 0 0">${skill ? esc(SKILLS[skill].note) : "Escolha uma skill ou deixe o palpite (a mais votada pelas suas escolhas)."}</p>
       <h3 style="margin-top:14px">Conflitos com o DESIGN.md da skill</h3>
@@ -775,8 +856,9 @@ function renderReview(grid) {
     </div>
     ${BN.available ? `<div class="box"><h3>Brand Nat · som e acabamento</h3><p style="color:var(--dim);margin:0 0 10px">Códigos S (som) e G (cor/acabamento) do pacote. Entram só na linha de códigos.</p><div class="skillpick finishes">${BN.finishes.map((f) => `<button class="${(L.finishes || []).includes(f.code) ? "on" : ""}" data-fin="${f.code}" title="${esc(f.what)}">${esc(f.code)} · ${esc(f.name)}</button>`).join("")}</div>${j.brandNat ? `<p style="margin:12px 0 0;color:var(--fg)"><b>Códigos:</b> <code>${esc(j.brandNat.codes.join(" "))}</code></p>` : ""}</div>` : ""}
     <div class="box"><h3>Notas para o Claude</h3><textarea id="notes" placeholder="Ex.: a cor do canal é #ff6600, use no acento; não cubra o quadro atrás de mim; prints estão em Pictures/Screenshots.">${esc(L.notes)}</textarea></div>
-    <div class="box"><h3>Prompt pronto</h3><pre id="promptPre">${esc(promptText())}</pre></div>
+    <details class="box adv-box"><summary>O pedido que vai para o Claude</summary><pre id="promptPre">${esc(promptText())}</pre></details>
   </div>`;
+  $$("[data-act]", grid).forEach((b) => (b.onclick = () => (b.dataset.act === "test" ? testReal() : save())));
   $$(".skillpick button[data-s]", grid).forEach((b) => (b.onclick = () => { L.skill = b.dataset.s === L.skill ? null : b.dataset.s; renderStep(); }));
   $$(".finishes button", grid).forEach((b) => (b.onclick = () => { const c = b.dataset.fin; const a = L.finishes || (L.finishes = []); const i = a.indexOf(c); i >= 0 ? a.splice(i, 1) : a.push(c); autosave(); renderStep(); }));
   $$("[data-x]", grid).forEach((a) => (a.onclick = (e) => { e.preventDefault(); L.extras.splice(Number(a.dataset.x), 1); renderStep(); }));
@@ -794,7 +876,7 @@ function applyPreset(id) {
   if (L.captions && !capById(L.captions)) L.captions = "one-word-lower";
   if (L.hook && !byId(HOOKS, L.hook)) L.hook = "big-caps";
   L.elements = L.elements.filter((id) => byId(ELEMENTS, id)); L.motion = L.motion.filter((id) => byId(MOTIONS, id));
-  toast(p.skill ? `Preset ${p.name}: ${SKILLS[p.skill].name}. Você ainda pode mudar tudo.` : "Começando do zero.");
+  toast(UI.mode === "tpl" ? `Template ${p.name} no seu clipe. Próximo: Ajustar (opcional) ou Testar e salvar.` : p.skill ? `Preset ${p.name}: ${SKILLS[p.skill].name}. Você ainda pode mudar tudo.` : "Começando do zero.");
   renderStep(); rebuildMain();
 }
 async function save() {
@@ -802,10 +884,14 @@ async function save() {
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) return toast("Slug inválido: minúsculas, números e hífens (ex.: meu-reel-01).");
   const r = await fetch("/api/look", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ project: slug, look: lookJson() }) }).then((x) => x.json());
   if (r.error) return toast("Erro: " + r.error);
-  toast(`Salvo em ${r.file} (+ LOOK.md). Prompt copiado: cole no Claude.`);
+  toast(`Salvo em ${r.file}. O pedido foi copiado: cole no Claude junto com o seu vídeo.`);
   try { await navigator.clipboard.writeText(promptText()); } catch {}
 }
 $("#save").onclick = save;
+$("#switchPath").onclick = () => { if (!UI.mode || confirm(UI.mode === "tpl" ? "Trocar para Montar do zero? Suas escolhas continuam." : "Trocar para Usar um template? Suas escolhas continuam.")) setMode(UI.mode ? (UI.mode === "tpl" ? "free" : "tpl") : "tpl"); };
+$("#advToggle").onchange = (e) => { UI.adv = e.target.checked; document.body.classList.toggle("adv", UI.adv); try { localStorage.setItem("look-builder:adv", UI.adv ? "1" : "0"); } catch {} renderStep(); };
+try { UI.adv = localStorage.getItem("look-builder:adv") === "1"; $("#advToggle").checked = UI.adv; document.body.classList.toggle("adv", UI.adv); } catch {}
+try { const m = localStorage.getItem("look-builder:mode"); setMode(m === "tpl" || m === "free" ? m : null, { quiet: true }); } catch { setMode(null, { quiet: true }); }
 // ---- "Testar de verdade": real HyperFrames snapshot of the current look
 async function testReal() {
   const slug = $("#slug").value.trim();
@@ -814,8 +900,11 @@ async function testReal() {
   const dlg = $("#testDlg"), body = $("#testBody"), btn = $("#testReal");
   body.innerHTML = `<p class="test-wait">Montando o projeto de teste e capturando frames com o HyperFrames… no seu PC pode levar um minuto.${UI.hasBack ? " Este look passa efeitos atrás da pessoa: na primeira vez de cada trecho o HyperFrames recorta a pessoa (remove-background), alguns minutos a mais." : ""}</p>`;
   $("#testPath").textContent = ""; btn.classList.add("busy"); if (!dlg.open) dlg.showModal();
+  body.innerHTML = progressHtml(null, UI.hasBack);
+  const poll = setInterval(async () => { try { const p = await fetch("/api/test-progress").then((x) => x.json()); if (p && p.stage && p.stage !== "done") body.innerHTML = progressHtml(p, UI.hasBack); } catch {} }, 1000);
   try {
     const r = await fetch("/api/test", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ project: slug, look: lookJson(), from: video.currentTime || 0, dur: L.elements.some((id) => (byId(ELEMENTS, id) || {}).scene) ? 15 : 8 }) }).then((x) => x.json());
+    clearInterval(poll);
     if (r.error) { body.innerHTML = `<div class="test-err">${esc(r.error)}</div>`; return; }
     const label = (f) => { const m = /at-(\d+(?:\.\d+)?)s/.exec(f); return m ? `${Number(m[1]).toFixed(1)} s` : f; };
     body.innerHTML = `<div class="shots ${UI.landscape ? "wide" : ""}">${r.images.map((im, i) => `<figure class="shot"><a href="${im.url}" target="_blank" rel="noopener"><img src="${im.url}" alt="${esc(im.file)}" loading="lazy"></a><figcaption><span>${label(im.file)}</span><span>${esc(im.file)}</span></figcaption></figure>`).join("")}</div>`;
@@ -823,12 +912,12 @@ async function testReal() {
     if (r.matte && r.matte.error) toast("O recorte da pessoa falhou: " + r.matte.error.split("\n")[0]);
     toast("Frames reais prontos.");
   } catch (e) { body.innerHTML = `<div class="test-err">${esc(e.message || e)}</div>`; }
-  finally { btn.classList.remove("busy"); }
+  finally { clearInterval(poll); btn.classList.remove("busy"); }
 }
 $("#testReal").onclick = testReal;
 $("#testClose").onclick = () => $("#testDlg").close();
 $("#slug").oninput = () => { UI.slugTouched = true; };
-$("#copyPrompt").onclick = async () => { try { await navigator.clipboard.writeText(promptText()); toast("Prompt copiado."); } catch { toast("Não deu para copiar; veja a Revisão."); } };
+$("#copyPrompt").onclick = async () => { $("#advMenu").open = false; try { await navigator.clipboard.writeText(promptText()); toast("Prompt copiado."); } catch { toast("Não deu para copiar; veja a Revisão."); } };
 
 // ------------------------------------------------------------------ misc wiring
 $("#clipSelect").onchange = (e) => openClip(e.target.value, e.target.selectedOptions[0]?.dataset.project || null);
@@ -910,7 +999,7 @@ $("#fromTranscript").onclick = async () => {
   ["hook1", "hook2", "keyword"].forEach((k) => ($("#" + k).value = UI.text[k])); $("#wordsIn").value = UI.text.words.join(" ");
   toast(`Texto de exemplo vindo de ${r.sample.file}.`); renderStep(); rebuildMain();
 };
-$$(".tab").forEach((t) => (t.onclick = () => { $$(".tab").forEach((x) => x.classList.toggle("on", x === t)); const j = t.dataset.view === "json"; $("#jsonView").hidden = !j; $("#grid").hidden = j; $(".step-head").hidden = j; if (j) $("#jsonPre").textContent = JSON.stringify(lookJson(), null, 2); }));
+$$(".tab[data-view]").forEach((t) => (t.onclick = () => { $$(".tab[data-view]").forEach((x) => x.classList.toggle("on", x === t)); $("#advMenu").open = false; const j = t.dataset.view === "json"; $("#jsonView").hidden = !j; $("#grid").hidden = j; $(".step-head").hidden = j; if (j) $("#jsonPre").textContent = JSON.stringify(lookJson(), null, 2); }));
 window.addEventListener("resize", () => { layoutStage(); scaleWorlds(); });
 
 let deb; function debounce(fn) { clearTimeout(deb); deb = setTimeout(fn, 160); }

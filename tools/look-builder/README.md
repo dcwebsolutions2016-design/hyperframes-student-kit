@@ -164,6 +164,14 @@ USER_FONTS="C:\caminho\da\pasta" node tools/look-builder/server.mjs
     guardado em `look-test/assets/matte-<chave>.webm` e reaproveitado no próximo teste do mesmo trecho) e monta as
     três camadas na composição HyperFrames.
   - `look.json` ganha `matte.needed`; o `LOOK.md` e a skill `/look-builder` dizem como empilhar na edição final.
+- **Dois caminhos.** Ao abrir, o painel pergunta "Como você quer começar?": **Usar um template** (3 passos:
+  Template → Ajustar → Testar e salvar) ou **Montar do zero** (os 7 passos). "Trocar caminho" no topo troca a qualquer
+  hora sem perder as escolhas. Os templates ficam agrupados pelo objetivo (Reel falado, Explicativo e aula, Anúncio e
+  venda, Motion sem rosto) e a origem (Kit, Ajene, Altra, Zee, Castilho, Ten Fold) aparece só como etiqueta no card.
+  "Ajustar" tem abas Textos, Cores, Fontes e Legenda. As duas ações finais são **Ver render de verdade** (com progresso
+  por etapa: montando, recortando a pessoa, capturando os quadros) e **Salvar e usar no Claude** (grava e copia o
+  pedido). JSON, copiar o pedido e as opções avançadas (Brand Nat, Legenda Dinâmica, skill e conflitos) ficam no menu
+  **Avançado**.
 - **Edit Review** (`/review?project=<slug>`, botão "Edit Review" no topo do painel): assista o corte do projeto, deixe
   notas por tempo (N), uma lista de edits com tipo, in/out e status (E ou Shift+Enter; "Importar cortes da EDL" traz
   os cortes do cut-silences / cut-mistakes já marcados como feitos), e a transcrição clicável que segue o player.

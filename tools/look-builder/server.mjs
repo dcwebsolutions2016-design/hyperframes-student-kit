@@ -161,6 +161,7 @@ function pickVideoFile(startDir) {
   });
 }
 let picking = false;
+let testProg = null; // stage of the running "Ver render de verdade" for /api/test-progress
 
 function readTranscript(slug) {
   if (!slugOk(slug)) return null;
@@ -351,6 +352,7 @@ const server = createServer(async (req, res) => {
       return json(res, 200, { ok: true, file: relative(root, f).split(sep).join("/"), md: relative(root, join(dir, "LOOK.md")).split(sep).join("/") });
     }
     // "Testar de verdade": build a HyperFrames composition from the look and snapshot it.
+    if (p === "/api/test-progress") return json(res, 200, testProg ? { ...testProg, elapsed: Date.now() - testProg.t0 } : { stage: null });
     if (p === "/api/test" && req.method === "POST") {
       const body = JSON.parse(await readBody(req) || "{}");
       const slug = body.project;
@@ -360,17 +362,22 @@ const server = createServer(async (req, res) => {
       const projectDir = join(root, "video-projects", slug);
       mkdirSync(projectDir, { recursive: true });
       const t0 = Date.now();
+      testProg = { stage: "build", t0, pct: null };
       let built;
       try { built = buildTestProject({ ...body.look, project: slug }, { projectDir, clip, from: Number(body.from) || 0, dur: Math.min(15, Math.max(5, Number(body.dur) || 8)) }); }
       catch (e) { return json(res, 500, { error: "Falha ao montar o projeto de teste: " + (e.message || e) }); }
       // effects that pass behind the person: cut the person out of the excerpt (cached) and stack the layers
       let matte = null;
       if (built.needsMatte && body.matte !== false) {
-        try { const m = await ensureMatte(built.dir, built.clipFile, built.matteKey); built.writeHtml(m.rel); matte = { file: m.rel, cached: m.cached }; }
+        testProg = { stage: "matte", t0, pct: null };
+        const pctOf = (txt) => { const m = String(txt).match(/(\d{1,3})(?:\.\d+)?\s*%/g); if (m) testProg.pct = Math.min(100, parseInt(m[m.length - 1], 10)); };
+        try { const m = await ensureMatte(built.dir, built.clipFile, built.matteKey, { onData: pctOf }); built.writeHtml(m.rel); matte = { file: m.rel, cached: m.cached }; }
         catch (e) { matte = { error: String(e.message || e).slice(0, 600) }; }
       }
       try {
+        testProg = { stage: "snap", t0, pct: null };
         const r = await runSnapshot(built.dir, built.times);
+        testProg = { stage: "done", t0, pct: 100 };
         return json(res, 200, { ok: true, matte, dir: relative(root, built.dir).split(sep).join("/"), times: built.times, start: built.start, ms: Date.now() - t0,
           images: r.files.map((f) => ({ file: f, url: `/api/testimg?project=${encodeURIComponent(slug)}&f=${encodeURIComponent(f)}&v=${Date.now()}` })), log: r.log });
       } catch (e) { return json(res, 500, { error: String(e.message || e), dir: relative(root, built.dir).split(sep).join("/") }); }

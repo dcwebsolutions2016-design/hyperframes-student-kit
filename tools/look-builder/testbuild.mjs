@@ -181,7 +181,7 @@ export function buildTestProject(look, { projectDir, clip, from = 0, dur = 8 }) 
 // Run `npx hyperframes snapshot` on the test project. Resolves with the PNG file names.
 // Cut the person out of the test excerpt with `hyperframes remove-background` (local model, transparent WebM).
 // Cached per clip + excerpt in assets/matte-<key>.webm, so the next test of the same moment is instant.
-export function ensureMatte(dir, clipFile, key, { timeoutMs = 15 * 60 * 1000 } = {}) {
+export function ensureMatte(dir, clipFile, key, { timeoutMs = 15 * 60 * 1000, onData = null } = {}) {
   const name = `matte-${key}.webm`, outFile = join(dir, "assets", name);
   if (existsSync(outFile) && statSync(outFile).size > 1000) return Promise.resolve({ rel: "assets/" + name, cached: true });
   for (const f of readdirSync(join(dir, "assets"))) if (/^matte-.*\.webm$/i.test(f)) rmSync(join(dir, "assets", f), { force: true });
@@ -191,7 +191,7 @@ export function ensureMatte(dir, clipFile, key, { timeoutMs = 15 * 60 * 1000 } =
     const child = cli ? spawn(process.execPath, [cli, ...args], { cwd: root, windowsHide: true })
       : spawn(process.platform === "win32" ? "npx.cmd" : "npx", ["hyperframes", ...args], { cwd: root, shell: process.platform === "win32", windowsHide: true });
     let log = "";
-    child.stdout.on("data", (d) => (log += d)); child.stderr.on("data", (d) => (log += d));
+    child.stdout.on("data", (d) => { log += d; if (onData) onData(String(d)); }); child.stderr.on("data", (d) => { log += d; if (onData) onData(String(d)); });
     const timer = setTimeout(() => { child.kill(); fail(new Error("o recorte demorou demais\n" + log.slice(-600))); }, timeoutMs);
     child.on("error", (e) => { clearTimeout(timer); fail(e); });
     child.on("close", (code) => { clearTimeout(timer); existsSync(outFile) && statSync(outFile).size > 1000 ? ok({ rel: "assets/" + name, cached: false, log: log.slice(-800) }) : fail(new Error(`remove-background saiu com código ${code}\n` + log.slice(-1200))); });
@@ -203,7 +203,7 @@ function hyperframesCli() {
   const cli = join(root, "node_modules", "hyperframes", JSON.parse(readFileSync(bin, "utf8")).bin?.hyperframes || "dist/cli.js");
   return existsSync(cli) ? cli : null;
 }
-export function runSnapshot(dir, times, { timeoutMs = 180000 } = {}) {
+export function runSnapshot(dir, times, { timeoutMs = 180000, onData = null } = {}) {
   const outDir = join(dir, "snapshots");
   if (existsSync(outDir)) rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
@@ -216,7 +216,7 @@ export function runSnapshot(dir, times, { timeoutMs = 180000 } = {}) {
       ? spawn(process.execPath, [cli, ...args], { cwd: root, windowsHide: true })
       : spawn(process.platform === "win32" ? "npx.cmd" : "npx", ["hyperframes", ...args], { cwd: root, shell: process.platform === "win32", windowsHide: true });
     let log = "";
-    child.stdout.on("data", (d) => (log += d)); child.stderr.on("data", (d) => (log += d));
+    child.stdout.on("data", (d) => { log += d; if (onData) onData(String(d)); }); child.stderr.on("data", (d) => { log += d; if (onData) onData(String(d)); });
     const timer = setTimeout(() => { child.kill(); fail(new Error("snapshot demorou demais (>" + timeoutMs / 1000 + " s)\n" + log.slice(-800))); }, timeoutMs);
     child.on("error", (e) => { clearTimeout(timer); fail(e); });
     child.on("close", (code) => {
