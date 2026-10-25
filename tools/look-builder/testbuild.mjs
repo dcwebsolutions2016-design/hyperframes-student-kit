@@ -11,6 +11,7 @@ import { COLOURS, FONTS, HOOKS, CAPTIONS, ELEMENTS, MOTIONS, ldsCaption } from "
 import "./looks.zee.mjs";
 import "./looks.castilho.mjs";
 import { AJ_RUNTIME } from "./looks.ajene.mjs";
+import { AL_RUNTIME } from "./looks.altra.mjs";
 import { LAYER_CSS, hasBack } from "./layers.mjs";
 import { createHash } from "node:crypto";
 import "./looks.tenfold.mjs";
@@ -130,7 +131,8 @@ ${LAYER_CSS}
 const tl = gsap.timeline({ paused: true });
 const cam = document.getElementById("cam"), camFg = document.getElementById("camFg");
 const camT = camFg ? [cam, camFg] : cam;
-${plan.elBeats.some((b) => b.scene) ? AJ_RUNTIME : ""}
+${plan.elBeats.some((b) => b.scene && !b.el.runtime) ? AJ_RUNTIME : ""}
+${plan.elBeats.some((b) => b.el.runtime === "altra") ? AL_RUNTIME : ""}
 const runLayer = (R, C) => {
 ${anims.join("\n")}
 };

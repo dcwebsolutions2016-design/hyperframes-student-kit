@@ -170,6 +170,14 @@ USER_FONTS="C:\caminho\da\pasta" node tools/look-builder/server.mjs
   Marcadores na timeline: notas (laranja), edits (verde), cortes da EDL (vermelho). Salvar (Ctrl+S) grava
   `video-projects/<slug>/review.json` e `REVIEW.md`; rascunho em localStorage até salvar. Arquivos: `review.html`,
   `review.css`, `review.js`; rotas `/api/review` GET/POST.
+- `looks.altra.mjs`: **nossas versões** dos nove vídeos de exemplo de altralabs.com.br/motiongraphics, lidos quadro a
+  quadro nas amostras públicas, sem as marcas originais. Cenas de 15 s (presets `alt-*`, filtro "Altra"):
+  Bruto → Editado (cortina bruto/editado, palavras gigantes atrás da cabeça, painéis de pedido e áudio, você num quadro,
+  linha do tempo), Bokeh quente, Manifesto IA, Balão de retenção, Micro-interações de UI, Promo de streaming (marca
+  fictícia), Gravura editorial, Faixas cinéticas e Anúncio lavanda. Legendas `al-word` (barra de progresso laranja) e
+  `al-glow`; ganchos `al-typing` (digitando + caixa vermelha) e `al-bracket` ([ ano ]); seis paletas `altra-*`.
+  Os cards desses presets mostram o quadro real da cena (`live: true`), não um desenho. Os helpers das animações vão
+  para o teste real como `AL_RUNTIME`.
 - `looks.tenfold.mjs`: os três looks do /video-edit da Ten Fold (Bold, Cool girl, Cool dude) como presets `tf-*`.
 - Skill `/look-builder` (`.claude/skills/look-builder/`): chama a edição a partir do `look.json` ou de um template id,
   como os pacotes gringos fazem com "/". Ela roteia para a skill do kit que o look aponta.

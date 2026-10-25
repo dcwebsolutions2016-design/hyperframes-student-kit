@@ -4,7 +4,8 @@ import { SKILLS, COLOURS, FONTS, HOOKS, CAPTIONS, ELEMENTS, MOTIONS, PRESETS, CO
 import "./looks.zee.mjs";      // effects from the zeemagede reel (frame-by-frame analysis)
 import "./looks.castilho.mjs"; // the 35 effects from castilhoia.com
 import "./looks.ajene.mjs";    // our versions of the editing.ajenepinnock.com templates
-import "./looks.tenfold.mjs";  // the three Ten Fold looks
+import "./looks.tenfold.mjs";
+import "./looks.altra.mjs";    // our versions of the altralabs.com.br motion samples  // the three Ten Fold looks
 import { installBrandNat } from "./looks.brandnat.mjs";
 import { sketchFor } from "./sketch.mjs";
 import { avatarDataUrl } from "./avatar.mjs";
@@ -348,6 +349,7 @@ function presetCard(p, big = false) {
   const img = PRESET_IMG[p.id];
   const frame = !p.skill ? `<div class="pframe blank">∅</div>`
     : img ? `<div class="pframe" style="padding-bottom:${Math.min(ratio, 100)}%"><img src="${img}" alt="" loading="lazy"></div>`
+    : p.live ? `<div class="pframe live" style="padding-bottom:177.8%"><div class="cam" style="background-image:url(${posterUrl()})"></div><div class="world" style="width:${UI.W}px;height:${UI.H}px"></div><i class="play">▶</i></div>`
     : `<div class="pframe has-sketch ${WIDE.has(p.id) ? "wide" : ""}" style="padding-bottom:${WIDE.has(p.id) ? 56.25 : 177.8}%"><div class="sk">${MOCK_KIND[p.id] ? mockupHtml(MOCK_KIND[p.id], WIDE.has(p.id)) : sketchFor(p, (byId(COLOURS, p.picks.colours) || COLOURS[0]).vars.acc, isLds() ? L.captions : null)}</div><div class="cam" style="background-image:url(${posterUrl()})"></div><div class="world" style="width:${UI.W}px;height:${UI.H}px"></div><i class="play">▶</i></div>`;
   const acc = p.picks.colours ? (byId(COLOURS, p.picks.colours) || {}).vars?.acc || "#333" : "#333";
   return `<button class="preset ${big ? "big" : ""} ${L.preset === p.id ? "on" : ""}" data-p="${p.id}" title="${esc(p.desc)}" style="--pacc:${acc}">${frame}<b>${esc(p.name)}<small>${p.skill ? (WIDE.has(p.id) ? "16:9" : "9:16") : ""}</small></b><span>${esc(big ? p.desc : p.skill ? (SKILLS[p.skill] || {}).name || p.skill : "nada marcado")}</span></button>`;
@@ -355,9 +357,11 @@ function presetCard(p, big = false) {
 // Static mini preview (hook + first caption word + first element); on hover the card plays a short loop.
 function presetScene(p) {
   const s = withPick({ colours: p.picks.colours, fonts: p.picks.fonts });
-  const hook = byId(HOOKS, p.picks.hook && p.picks.hook !== "none" ? p.picks.hook : "big-caps");
-  const caps = (isLds() && capById(L.captions)) || capById(p.picks.captions && p.picks.captions !== "none" ? p.picks.captions : "one-word-outline") || byId(CAPTIONS, "one-word-outline");
   const el = (p.picks.elements || []).map((id) => byId(ELEMENTS, id)).find(Boolean);
+  // a 15 s template scene is the whole look: no stand-in hook or captions on top of it
+  const isScene = !!(el && el.scene);
+  const hook = byId(HOOKS, p.picks.hook && p.picks.hook !== "none" ? p.picks.hook : isScene ? "none" : "big-caps");
+  const caps = (isLds() && capById(L.captions)) || capById(p.picks.captions && p.picks.captions !== "none" ? p.picks.captions : isScene ? "none" : "one-word-outline") || byId(CAPTIONS, "one-word-outline");
   return { s, hook, caps, el, html: hook.render(s) + caps.render(s) + (el ? el.render(s) : "") };
 }
 const presetTls = new Map();
@@ -466,7 +470,7 @@ function renderStep() {
   }
   if (st.id === "elements" || st.id === "motion") {
     UI.flt = UI.flt || { q: "", fam: "all" };
-    const fams = [["all", "Todos"], ["oney", "Oney"], ["zee-effects", "Zee"], ["castilho-35", "35 efeitos"], ["lib", "style-library"], ["ajene-templates", "Templates"], ["tenfold", "Ten Fold"], ...(BN.available ? [["brand-nat", "Brand Nat"]] : [])];
+    const fams = [["all", "Todos"], ["oney", "Oney"], ["zee-effects", "Zee"], ["castilho-35", "35 efeitos"], ["lib", "style-library"], ["ajene-templates", "Templates"], ["altra-labs", "Altra"], ["tenfold", "Ten Fold"], ...(BN.available ? [["brand-nat", "Brand Nat"]] : [])];
     const all = { elements: ELEMENTS, motion: MOTIONS }[st.id];
     const cnt = (k) => all.filter((o) => k === "all" || (k === "oney" ? (o.skills || []).some((s) => /oney|vsl/.test(s)) : k === "lib" ? (o.skills || []).some((s) => /kallaway|vox/.test(s)) : (o.skills || []).includes(k))).length;
     $("#quick").innerHTML = `<span class="lbl">Mostrar:</span>` + fams.map(([k, t]) => `<button class="${UI.flt.fam === k ? "on" : ""}" data-fam="${k}">${t} <small>${cnt(k)}</small></button>`).join("") + `<input id="fltSearch" placeholder="buscar… (ex.: celular, carimbo, zoom)" value="${esc(UI.flt.q)}" spellcheck="false">`;
