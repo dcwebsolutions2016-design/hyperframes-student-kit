@@ -92,9 +92,9 @@ export const HOOKS = [
       <span class="l2" style="display:inline-block;position:relative;color:${S.v.acc}">${esc(caseOf(S, S.text.hook2))}<i class="ul" style="position:absolute;left:0;right:0;bottom:-10px;height:10px;background:${S.v.acc};transform-origin:left;display:block"></i></span></div>`,
     anim: (tl, el) => tl.from(el.querySelectorAll(".l1,.l2"), { y: 30, opacity: 0, duration: 0.5, stagger: 0.15, ease: "expo.out" }).from(el.querySelector(".ul"), { scaleX: 0, duration: 0.5, ease: "power3.inOut" }, "-=0.1") },
   { id: "behind-head", name: "Título atrás da cabeça", desc: "Display enorme no topo; a cabeça cobre as letras de baixo (precisa matte)", skills: ["vsl", "video-colagem-oney"],
-    render: (S) => `<div class="ov hook" style="left:0;top:${ab(S, 330)}px;width:${S.W}px;text-align:center;${disp(S, S.landscape ? 170 : 200, "line-height:.9;letter-spacing:-.02em")};color:${S.v.txt};text-shadow:0 0 40px ${S.v.acc}66">
+    render: (S) => `<div class="ov hook back" style="left:0;top:${ab(S, 330)}px;width:${S.W}px;text-align:center;${disp(S, S.landscape ? 170 : 200, "line-height:.9;letter-spacing:-.02em")};color:${S.v.txt};text-shadow:0 0 40px ${S.v.acc}66">
       <span class="l1" style="display:block">${esc(caseOf(S, S.text.hook1.split(" ").slice(0, 2).join(" ")))}</span><span class="l2" style="display:block;color:${S.v.sec}">${esc(caseOf(S, S.text.hook2.split(" ").slice(-1)[0]))}</span>
-      <small style="display:block;${body(S, 26)};opacity:.7;margin-top:14px;letter-spacing:.2em">ATRÁS DA CABEÇA · MATTE</small></div>`,
+      <small class="mnote" style="display:block;${body(S, 26)};opacity:.7;margin-top:14px;letter-spacing:.2em">ATRÁS DA CABEÇA · MATTE</small></div>`,
     anim: (tl, el) => tl.from(el.querySelectorAll(".l1,.l2"), { scale: 0.92, opacity: 0, filter: "blur(16px)", duration: 0.5, stagger: 0.1, ease: "power3.out" }) },
   { id: "colour-block", name: "Colour block", desc: "Palavras pesadas batem num bloco de cor (carimbo da colagem)", skills: ["video-colagem-oney", "vox-explainer"],
     render: (S) => `<div class="ov hook" style="left:${cx(S) - 400}px;top:${ab(S, 270)}px;width:800px;text-align:center">

@@ -150,6 +150,20 @@ USER_FONTS="C:\caminho\da\pasta" node tools/look-builder/server.mjs
   volta da pessoa no preview; a edição real usa matte. Presets `tpl-*`, paleta "Laranja Ajene", legendas `aj-word`,
   `aj-phrase`, `aj-stacked`, `ear-to-ear`. O "Testar de verdade" de uma cena renderiza 15 s (5 frames) e os helpers das
   animações vão junto na página (`AJ_RUNTIME`).
+- **Camadas: pessoa na frente, efeitos atrás** (`layers.mjs`). Um efeito marca com `class="back"` o que passa atrás
+  da pessoa (e `class="front"` o que, dentro disso, fica na frente: os toasts da Interface em Profundidade). Marcados:
+  fundos dos templates Ajene (recortes, grade, vlog, cinema, diálogo, história natural, ensaio visual), telas da
+  Interface em Profundidade, título atrás da cabeça, capa de banca, gráfico nas costas, parede de jornal, cristal,
+  chuva de letras, letreiro, metade de trás do Carrossel 360 e dos Satélites (troca a cada volta), celular atrás da
+  pessoa, contorno brilhante e a palavra grande do Ten Fold Bold. O look é desenhado duas vezes, com a mesma
+  timeline: cópia de trás (só `.back`) → pessoa recortada → cópia da frente (o resto).
+  - **No palco**: "recorte ao vivo" (aparece quando o look tem partes atrás) recorta a pessoa no navegador com o
+    MediaPipe Image Segmenter (modelo selfie, baixado na primeira vez) e desenha num canvas que segue a câmera.
+    Desligado, os fundos voltam a abrir o buraco oval em volta da pessoa.
+  - **No Testar de verdade**: o servidor roda `hyperframes remove-background` no trecho de teste (WebM com alpha,
+    guardado em `look-test/assets/matte-<chave>.webm` e reaproveitado no próximo teste do mesmo trecho) e monta as
+    três camadas na composição HyperFrames.
+  - `look.json` ganha `matte.needed`; o `LOOK.md` e a skill `/look-builder` dizem como empilhar na edição final.
 - **Edit Review** (`/review?project=<slug>`, botão "Edit Review" no topo do painel): assista o corte do projeto, deixe
   notas por tempo (N), uma lista de edits com tipo, in/out e status (E ou Shift+Enter; "Importar cortes da EDL" traz
   os cortes do cut-silences / cut-mistakes já marcados como feitos), e a transcrição clicável que segue o player.

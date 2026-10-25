@@ -1,4 +1,5 @@
 // Look builder — app. Seven steps; every card renders the chosen look over a frame of the user's own clip.
+import { hasBack } from "./layers.mjs";
 import { SKILLS, COLOURS, FONTS, HOOKS, CAPTIONS, ELEMENTS, MOTIONS, PRESETS, CONFLICTS, ldsCaption } from "./looks.mjs";
 import "./looks.zee.mjs";      // effects from the zeemagede reel (frame-by-frame analysis)
 import "./looks.castilho.mjs"; // the 35 effects from castilhoia.com
@@ -51,7 +52,7 @@ const STEPS = [
 ];
 
 let mainTl = null, cardTls = [];
-const video = $("#video"), stage = $("#stage"), world = $("#world"), cam = $("#cam"), guides = $("#guides");
+const video = $("#video"), stage = $("#stage"), world = $("#world"), worldBack = $("#worldBack"), cam = $("#cam"), camFg = $("#camFg"), guides = $("#guides");
 
 // ------------------------------------------------------------------ derived style state for renderers
 function S() {
@@ -250,8 +251,7 @@ function layoutStage() {
   let h = w * UI.H / UI.W; if (h > maxH) { h = maxH; w = h * UI.W / UI.H; }
   stage.style.width = w + "px"; stage.style.height = h + "px";
   const s = w / UI.W;
-  world.style.width = guides.style.width = UI.W + "px"; world.style.height = guides.style.height = UI.H + "px";
-  world.style.transform = guides.style.transform = `scale(${s})`;
+  for (const el of [world, worldBack, guides]) { el.style.width = UI.W + "px"; el.style.height = UI.H + "px"; el.style.transform = `scale(${s})`; }
   drawGuides();
 }
 function drawGuides() {
@@ -576,38 +576,120 @@ function motionDemo(o, s) {
 function rebuildMain() {
   if (mainTl) mainTl.kill();
   const s = S();
-  gsap.set(cam, { clearProps: "all" });
+  gsap.set([cam, camFg], { clearProps: "all" });
   const hook = byId(HOOKS, L.hook), caps = capById(L.captions);
   const els = L.elements.map((id) => byId(ELEMENTS, id)).filter(Boolean);
-  world.innerHTML = (hook ? hook.render(s) : "") + (caps ? caps.render(s) : "") + els.map((e) => e.render(s)).join("");
+  const html = (hook ? hook.render(s) : "") + (caps ? caps.render(s) : "") + els.map((e) => e.render(s)).join("");
+  // Parts marked .back pass behind the person: with the live cut-out on, the look is rendered twice
+  // (behind copy under the person canvas, front copy over it) and both copies share this timeline.
+  UI.hasBack = hasBack(html);
+  const matte = UI.hasBack && matteWanted();
+  stage.classList.toggle("matte-on", matte);
+  world.innerHTML = html;
+  worldBack.innerHTML = matte ? html : "";
   mainTl = gsap.timeline({ repeat: -1, repeatDelay: 0.8 });
-  const h = $(".hook", world);
-  if (h && hook) { hook.anim(mainTl, h); mainTl.to(h, { opacity: 0, duration: 0.25 }, 3.2); }
-  // a template scene (looks.ajene.mjs) owns the whole 15 s: it starts at 0 and the captions spread across it
   const sceneDur = Math.max(0, ...els.map((d) => (d.scene ? d.dur || 15 : 0)));
-  playCaptions(mainTl, world, caps, 0.3, sceneDur);
+  const camT = matte ? [cam, camFg] : cam;
+  buildLayer(world, camT, { hook, caps, els, sceneDur });
+  if (matte) buildLayer(worldBack, null, { hook, caps, els, sceneDur });
   const motions = L.motion.map((m) => byId(MOTIONS, m)).filter(Boolean);
-  const camM = motions.filter((m) => m.camera), objM = motions.filter((m) => !m.camera);
+  motions.filter((m) => m.camera).forEach((m, i) => { const t = gsap.timeline(); m.anim(t, null, camT); mainTl.add(t, 3 + i * 3); });
+  const total = Math.max(5, sceneDur, 3.2 + els.reduce((a, d) => a + (d.scene ? 0 : d.anim ? 3.2 : 1.5), 0) + 1.5, caps && !sceneDur ? 0.3 + $$(".w", world).length * (caps.mode === "lds" ? 1.3 : caps.mode === "phrase" ? 1.2 : 0.34) + 0.5 : 0);
+  mainTl.to({}, { duration: 0.1 }, total);
+  updateMatteUi();
+  if (matte) startLiveMatte(); else stopLiveMatte();
+  $("#jsonPre").textContent = JSON.stringify(lookJson(), null, 2);
+  autosave();
+}
+// one copy of the look (hook, captions, elements) animated on mainTl; camT is the camera target (null = don't move it)
+function buildLayer(root, camT, { hook, caps, els, sceneDur }) {
+  const h = $(".hook", root);
+  if (h && hook) { hook.anim(mainTl, h); mainTl.to(h, { opacity: 0, duration: 0.25 }, 3.2); }
+  playCaptions(mainTl, root, caps, 0.3, sceneDur);
+  const objM = L.motion.map((m) => byId(MOTIONS, m)).filter((m) => m && !m.camera);
   let tNext = 2.9;
-  $$(".el", world).forEach((e, i) => {
+  $$(".el", root).forEach((e, i) => {
     const def = els[i];
-    if (def && def.scene) { const sub = gsap.timeline(); def.anim(sub, e, cam); mainTl.add(sub, 0); return; }
+    if (def && def.scene) { const sub = gsap.timeline(); def.anim(sub, e, camT); mainTl.add(sub, 0); return; }
     const t0 = tNext; tNext += def && def.anim ? 3.2 : 1.5;
     gsap.set(e, { opacity: 0 }); mainTl.set(e, { opacity: 1 }, t0);
-    if (def && def.anim) { const sub = gsap.timeline(); def.anim(sub, e, cam); mainTl.add(sub, t0); mainTl.to(e, { opacity: 0, duration: 0.25 }, t0 + 3.0); return; }
+    if (def && def.anim) { const sub = gsap.timeline(); def.anim(sub, e, camT); mainTl.add(sub, t0); mainTl.to(e, { opacity: 0, duration: 0.25 }, t0 + 3.0); return; }
     const m = objM[i % Math.max(1, objM.length)] || byId(MOTIONS, "blur-rise");
-    const sub = gsap.timeline(); m.anim(sub, e, cam); mainTl.add(sub, t0);
+    const sub = gsap.timeline(); m.anim(sub, e, camT); mainTl.add(sub, t0);
     if ($(".num,.bar", e)) { const t = gsap.timeline(); byId(MOTIONS, "count-tick").anim(t, e); mainTl.add(t, t0 + 0.2); }
     $$("path", e).forEach((p) => { const Lz = p.getTotalLength(); p.style.strokeDasharray = Lz; mainTl.fromTo(p, { strokeDashoffset: Lz }, { strokeDashoffset: 0, duration: 0.45 }, t0 + 0.2); });
     const li = $$(".li,.row,.ch", e); if (li.length) mainTl.from(li, { opacity: 0, y: 10, duration: 0.3, stagger: 0.18 }, t0 + 0.1);
     const strip = $(".strip", e); if (strip) mainTl.to(strip, { x: -900, duration: 4, ease: "none" }, t0);
     mainTl.to(e, { opacity: 0, duration: 0.25 }, t0 + 2.6);
   });
-  camM.forEach((m, i) => { const t = gsap.timeline(); m.anim(t, null, cam); mainTl.add(t, 3 + i * 3); });
-  const total = Math.max(5, sceneDur, 3.2 + els.reduce((a, d) => a + (d.scene ? 0 : d.anim ? 3.2 : 1.5), 0) + 1.5, caps && !sceneDur ? 0.3 + $$(".w", world).length * (caps.mode === "lds" ? 1.3 : caps.mode === "phrase" ? 1.2 : 0.34) + 0.5 : 0);
-  mainTl.to({}, { duration: 0.1 }, total);
-  $("#jsonPre").textContent = JSON.stringify(lookJson(), null, 2);
-  autosave();
+}
+
+// ---- live cut-out of the person (MediaPipe Image Segmenter in the browser, selfie model). Draws the presenter with an
+// alpha mask into #fgCanvas, which sits between the behind copy and the front copy of the look and follows the camera.
+let segmenter = null, segLoading = null, matteLoop = 0, segCanvas = null, segCtx = null;
+const matteWanted = () => !!(UI.clip && video.videoWidth && $("#liveMatte") && $("#liveMatte").checked);
+async function loadSegmenter() {
+  if (segmenter) return segmenter;
+  if (segLoading) return segLoading;
+  segLoading = (async () => {
+    const base = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10";
+    const mp = await import(`${base}/vision_bundle.mjs`);
+    const vision = await mp.FilesetResolver.forVisionTasks(`${base}/wasm`);
+    segmenter = await mp.ImageSegmenter.createFromOptions(vision, {
+      baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite", delegate: "GPU" },
+      runningMode: "VIDEO", outputConfidenceMask: true, outputCategoryMask: false,
+    });
+    return segmenter;
+  })();
+  try { return await segLoading; } catch (e) { segLoading = null; throw e; }
+}
+function startLiveMatte() {
+  if (matteLoop) return;
+  matteLoop = 1;
+  $("#matteState").textContent = "recortando…";
+  loadSegmenter().then(() => { if (matteLoop) { matteLoop = 2; updateMatteUi(); drawMatte(); } }).catch(() => {
+    matteLoop = 0; $("#liveMatte").checked = false; toast("Não consegui carregar o recorte ao vivo (precisa de internet para baixar o modelo)."); rebuildMain();
+  });
+}
+function stopLiveMatte() { matteLoop = 0; const c = $("#fgCanvas"); if (c && c.width) c.getContext("2d").clearRect(0, 0, c.width, c.height); }
+let lastSegT = -1, segStamp = 0;
+function drawMatte() {
+  if (matteLoop !== 2) return;
+  const next = () => (video.requestVideoFrameCallback ? video.requestVideoFrameCallback(drawMatte) : requestAnimationFrame(drawMatte));
+  if (!video.videoWidth || video.readyState < 2 || (video.paused && video.currentTime === lastSegT)) { requestAnimationFrame(drawMatte); return; }
+  lastSegT = video.currentTime;
+  const out = $("#fgCanvas");
+  const w = Math.min(540, video.videoWidth), h = Math.round(w * video.videoHeight / video.videoWidth);
+  if (out.width !== w || out.height !== h) { out.width = w; out.height = h; }
+  if (!segCanvas) { segCanvas = document.createElement("canvas"); segCtx = segCanvas.getContext("2d", { willReadFrequently: true }); }
+  if (segCanvas.width !== w || segCanvas.height !== h) { segCanvas.width = w; segCanvas.height = h; }
+  segCtx.drawImage(video, 0, 0, w, h);
+  segStamp = Math.max(segStamp + 1, performance.now());
+  let res;
+  try { res = segmenter.segmentForVideo(segCanvas, segStamp); } catch { next(); return; }
+  const mask = res && res.confidenceMasks && res.confidenceMasks[0];
+  if (mask) {
+    const mw = mask.width, mh = mask.height, m = mask.getAsFloat32Array();
+    const img = segCtx.getImageData(0, 0, w, h), d = img.data;
+    for (let y = 0; y < h; y++) {
+      const my = Math.min(mh - 1, (y * mh / h) | 0) * mw;
+      for (let x = 0; x < w; x++) {
+        const v = m[my + Math.min(mw - 1, (x * mw / w) | 0)];
+        d[(y * w + x) * 4 + 3] = v <= 0.35 ? 0 : v >= 0.65 ? 255 : ((v - 0.35) / 0.3) * 255;
+      }
+    }
+    out.getContext("2d").putImageData(img, 0, 0);
+  }
+  if (res && res.close) res.close();
+  next();
+}
+function updateMatteUi() {
+  const box = $("#matteBox"); if (!box) return;
+  box.hidden = !UI.hasBack;
+  const st = $("#matteState");
+  if (!UI.clip) st.textContent = "abra um clipe";
+  else if (!$("#liveMatte").checked) st.textContent = "desligado: o fundo abre um buraco em volta da pessoa";
+  else if (matteLoop === 2) st.textContent = "pessoa na frente, efeitos atrás";
 }
 
 // ------------------------------------------------------------------ review
@@ -641,6 +723,8 @@ function lookJson() {
     captions: captionsJson(), ldsEntrada: L.ldsEntrada,
     elements: L.elements.map((id) => ({ id, name: name(ELEMENTS, id) })),
     motion: L.motion.map((id) => ({ id, name: name(MOTIONS, id) })),
+    // parts marked .back pass behind the presenter: the edit needs the person cut out (layers.mjs)
+    matte: { needed: !!UI.hasBack, how: UI.hasBack ? "npx hyperframes remove-background <clip> -o assets/matte.webm; stack: video, .back parts, matte, the rest" : null },
     sampleText: UI.text, extras: L.extras, notes: L.notes, conflicts: conflicts(skill),
     brandNat: brandNatJson(),
   };
@@ -724,14 +808,15 @@ async function testReal() {
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) return toast("Slug inválido: minúsculas, números e hífens.");
   if (!UI.clip) return toast("Escolha um clipe antes de testar.");
   const dlg = $("#testDlg"), body = $("#testBody"), btn = $("#testReal");
-  body.innerHTML = `<p class="test-wait">Montando o projeto de teste e capturando frames com o HyperFrames… no seu PC pode levar um minuto.</p>`;
+  body.innerHTML = `<p class="test-wait">Montando o projeto de teste e capturando frames com o HyperFrames… no seu PC pode levar um minuto.${UI.hasBack ? " Este look passa efeitos atrás da pessoa: na primeira vez de cada trecho o HyperFrames recorta a pessoa (remove-background), alguns minutos a mais." : ""}</p>`;
   $("#testPath").textContent = ""; btn.classList.add("busy"); if (!dlg.open) dlg.showModal();
   try {
     const r = await fetch("/api/test", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ project: slug, look: lookJson(), from: video.currentTime || 0, dur: L.elements.some((id) => (byId(ELEMENTS, id) || {}).scene) ? 15 : 8 }) }).then((x) => x.json());
     if (r.error) { body.innerHTML = `<div class="test-err">${esc(r.error)}</div>`; return; }
     const label = (f) => { const m = /at-(\d+(?:\.\d+)?)s/.exec(f); return m ? `${Number(m[1]).toFixed(1)} s` : f; };
     body.innerHTML = `<div class="shots ${UI.landscape ? "wide" : ""}">${r.images.map((im, i) => `<figure class="shot"><a href="${im.url}" target="_blank" rel="noopener"><img src="${im.url}" alt="${esc(im.file)}" loading="lazy"></a><figcaption><span>${label(im.file)}</span><span>${esc(im.file)}</span></figcaption></figure>`).join("")}</div>`;
-    $("#testPath").textContent = `${r.dir} · ${r.images.length} frames · ${(r.ms / 1000).toFixed(0)} s · trecho a partir de ${r.start.toFixed(1)} s`;
+    $("#testPath").textContent = `${r.dir} · ${r.images.length} frames · ${(r.ms / 1000).toFixed(0)} s · trecho a partir de ${r.start.toFixed(1)} s${r.matte ? (r.matte.error ? " · recorte falhou, efeitos de trás ficaram na frente" : r.matte.cached ? " · recorte reaproveitado" : " · pessoa recortada (remove-background)") : ""}`;
+    if (r.matte && r.matte.error) toast("O recorte da pessoa falhou: " + r.matte.error.split("\n")[0]);
     toast("Frames reais prontos.");
   } catch (e) { body.innerHTML = `<div class="test-err">${esc(e.message || e)}</div>`; }
   finally { btn.classList.remove("busy"); }
@@ -789,6 +874,8 @@ $("#back5").onclick = () => (video.currentTime = Math.max(0, video.currentTime -
 $("#fwd5").onclick = () => (video.currentTime = Math.min(video.duration || 0, video.currentTime + 5));
 $("#mute").onchange = (e) => (video.muted = e.target.checked);
 $("#showGuides").onchange = drawGuides;
+$("#liveMatte").onchange = () => { try { localStorage.setItem("look-builder:liveMatte", $("#liveMatte").checked ? "1" : "0"); } catch {} rebuildMain(); };
+try { if (localStorage.getItem("look-builder:liveMatte") === "0") $("#liveMatte").checked = false; } catch {}
 $("#useAvatar").onchange = (e) => { UI.useAvatar = e.target.checked; applyBackgrounds(); stage.classList.toggle("avatar", UI.useAvatar || !UI.clip); try { localStorage.setItem(LS + "avatar", UI.useAvatar ? "1" : "0"); } catch {} };
 try { UI.useAvatar = localStorage.getItem(LS + "avatar") === "1"; $("#useAvatar").checked = UI.useAvatar; } catch {}
 stage.classList.add("avatar"); applyBackgrounds();

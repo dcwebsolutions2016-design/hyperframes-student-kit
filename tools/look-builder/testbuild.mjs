@@ -11,6 +11,8 @@ import { COLOURS, FONTS, HOOKS, CAPTIONS, ELEMENTS, MOTIONS, ldsCaption } from "
 import "./looks.zee.mjs";
 import "./looks.castilho.mjs";
 import { AJ_RUNTIME } from "./looks.ajene.mjs";
+import { LAYER_CSS, hasBack } from "./layers.mjs";
+import { createHash } from "node:crypto";
 import "./looks.tenfold.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -74,29 +76,35 @@ export function planFromLook(look, dur) {
   return { hook, caps, capDt, elBeats, camM, dur, sceneDur };
 }
 
-export function compositionHtml(look, S, plan, clipRel, clipDur, extraCss = "") {
+export function compositionHtml(look, S, plan, clipRel, clipDur, extraCss = "", matteRel = null) {
   const D = plan.dur;
   const id = "look-test";
-  const wrap = (inner, start, d, track, extra = "") => inner ? `<div class="clip" data-start="${start}" data-duration="${d.toFixed(2)}" data-track-index="${track}" style="position:absolute;inset:0;pointer-events:none;${extra}">${inner}</div>` : "";
+  // Layers (see layers.mjs): with a matte the look is written twice. Behind copy (z 1) → cut-out person video (z 2) →
+  // front copy (z 3). Each timed wrapper carries its layer class; both copies run the same animation code.
+  const layers = matteRel ? [["lb-back", 1, null], ["lb-front", 3, "camT"]] : [["lb-front", 3, "camT"]];
   let track = 1, body = "";
-  body += wrap(plan.hook && plan.hook.id !== "none" ? plan.hook.render(S) : "", 0, Math.min(D, 3.5), track++);
-  body += wrap(plan.caps ? plan.caps.render(S) : "", 0, D, track++, "z-index:5");
-  for (const b of plan.elBeats) body += wrap(b.el.render(S), b.t0 > 0 ? b.t0.toFixed(2) : 0, Math.max(0.5, Math.min(b.show, D - b.t0)), track++, `--t0:${b.t0}`);
-  // animation code: closures from looks.mjs serialised verbatim; `cycle` mirrors app.js cycleWords/playCaptions
+  const wrap = (inner, start, d, layer, z, extra = "") => inner ? `<div class="clip ${layer}" data-start="${start}" data-duration="${d.toFixed(2)}" data-track-index="${track++}" style="position:absolute;inset:0;pointer-events:none;z-index:${z};${extra}">${inner}</div>` : "";
+  for (const [layer, z] of layers) {
+    body += wrap(plan.hook && plan.hook.id !== "none" ? plan.hook.render(S) : "", 0, Math.min(D, 3.5), layer, z);
+    body += wrap(plan.caps ? plan.caps.render(S) : "", 0, D, layer, z + 0.5 > 3 ? 5 : z);
+    for (const b of plan.elBeats) body += wrap(b.el.render(S), b.t0 > 0 ? b.t0.toFixed(2) : 0, Math.max(0.5, Math.min(b.show, D - b.t0)), layer, z, `--t0:${b.t0}`);
+    if (layer === "lb-back" && matteRel) body += `\n  <div id="camFg"><video data-start="0" data-duration="${Math.min(D, clipDur).toFixed(2)}" data-track-index="${track++}" src="${matteRel}" muted playsinline></video></div>\n`;
+  }
+  // animation code: closures from looks.mjs serialised verbatim, run once per layer (R = layer selector, C = camera)
   const anims = [];
-  if (plan.hook && plan.hook.id !== "none") anims.push(`{ const h = document.querySelector("#${id} .hook"); if (h) { (${plan.hook.anim.toString()})(tl, h); tl.to(h, { opacity: 0, duration: 0.25 }, 3.2); } }`);
-  if (plan.caps) anims.push(`{ const c = document.querySelector("#${id} .caps"); if (c) { const ws = [...c.querySelectorAll(".w")]; const start = 0.3, dt = ${plan.capDt === "spread" ? `Math.max(0.34, (${plan.sceneDur} - start - 0.4) / (ws.length || 1))` : plan.capDt};
+  if (plan.hook && plan.hook.id !== "none") anims.push(`{ const h = document.querySelector(R + " .hook"); if (h) { (${plan.hook.anim.toString()})(tl, h); tl.to(h, { opacity: 0, duration: 0.25 }, 3.2); } }`);
+  if (plan.caps) anims.push(`{ const c = document.querySelector(R + " .caps"); if (c) { const ws = [...c.querySelectorAll(".w")]; const start = 0.3, dt = ${plan.capDt === "spread" ? `Math.max(0.34, (${plan.sceneDur} - start - 0.4) / (ws.length || 1))` : plan.capDt};
     ws.forEach((w, i) => { tl.set(w, { opacity: 1 }, start + i * dt); tl.set(w, { opacity: 0 }, start + (i + 1) * dt); });
     ${plan.caps.mode === "phrase" ? `ws.forEach((x, i) => tl.fromTo(x, { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3 }, start + i * dt));` : ""}
     ${plan.caps.mode === "lds" ? `ws.forEach((x, i) => tl.from([...x.querySelectorAll(".ldw")], { y: 14, opacity: 0, scale: 0.92, duration: 0.22, stagger: 0.18, ease: "back.out(1.6)" }, start + i * dt));` : ""} } }`);
-  plan.elBeats.forEach((b, i) => { if (b.scene) { anims.push(`{ const e = document.querySelectorAll("#${id} .el")[${i}]; if (e) { const sub = gsap.timeline(); (${b.el.anim.toString()})(sub, e, cam); tl.add(sub, 0); } }`); return; } anims.push(`{ const e = document.querySelectorAll("#${id} .el")[${i}]; if (e) { const t0 = ${b.t0};
-    const sub = gsap.timeline(); (${(b.el.anim || b.motion.anim).toString()})(sub, e, cam); tl.add(sub, t0);
+  plan.elBeats.forEach((b, i) => { if (b.scene) { anims.push(`{ const e = document.querySelectorAll(R + " .el")[${i}]; if (e) { const sub = gsap.timeline(); (${b.el.anim.toString()})(sub, e, C); tl.add(sub, 0); } }`); return; } anims.push(`{ const e = document.querySelectorAll(R + " .el")[${i}]; if (e) { const t0 = ${b.t0};
+    const sub = gsap.timeline(); (${(b.el.anim || b.motion.anim).toString()})(sub, e, C); tl.add(sub, t0);
     if (e.querySelector(".num,.bar")) { const t = gsap.timeline(); (${byId(MOTIONS, "count-tick").anim.toString()})(t, e); tl.add(t, t0 + 0.2); }
     e.querySelectorAll("path").forEach((p) => { const L = p.getTotalLength(); p.style.strokeDasharray = L; tl.fromTo(p, { strokeDashoffset: L }, { strokeDashoffset: 0, duration: 0.45 }, t0 + 0.2); });
     const li = e.querySelectorAll(".li,.row,.ch"); if (li.length) tl.from(li, { opacity: 0, y: 10, duration: 0.3, stagger: 0.18 }, t0 + 0.1);
     const strip = e.querySelector(".strip"); if (strip) tl.to(strip, { x: -900, duration: 4, ease: "none" }, t0);
     tl.to(e, { opacity: 0, duration: 0.25 }, t0 + ${b.el.anim ? 3.0 : 2.6}); } }`); });
-  plan.camM.forEach((m, i) => anims.push(`{ const t = gsap.timeline(); (${m.anim.toString()})(t, null, cam); tl.add(t, ${3 + i * 3}); }`));
+  const camAnims = plan.camM.map((m, i) => `{ const t = gsap.timeline(); (${m.anim.toString()})(t, null, camT); tl.add(t, ${3 + i * 3}); }`);
   const google = `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Fraunces:ital,wght@0,300;0,900;1,900&family=Archivo:wght@400;500;700&family=Playfair+Display:wght@700&family=Space+Mono&display=block">`;
   return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><title>Look test — ${esc(look.project || "look")}</title>
@@ -107,20 +115,27 @@ ${FONT_FACES}
 ${extraCss}
 *{box-sizing:border-box}html,body{margin:0;width:${S.W}px;height:${S.H}px;overflow:hidden;background:#000}
 #${id}{position:relative;width:${S.W}px;height:${S.H}px;overflow:hidden;background:#000}
-#cam{position:absolute;inset:0;overflow:hidden;transform-origin:50% 50%}
-#cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+#cam,#camFg{position:absolute;inset:0;overflow:hidden;transform-origin:50% 50%}
+#cam{z-index:0}#camFg{z-index:2;pointer-events:none}
+#cam video,#camFg video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .ov{position:absolute}
+${LAYER_CSS}
 </style></head><body>
-<div id="${id}" data-composition-id="${id}" data-start="0" data-duration="${D}" data-width="${S.W}" data-height="${S.H}">
+<div id="${id}" class="${matteRel ? "matte-on" : ""}" data-composition-id="${id}" data-start="0" data-duration="${D}" data-width="${S.W}" data-height="${S.H}">
   <div id="cam"><video data-start="0" data-duration="${Math.min(D, clipDur).toFixed(2)}" data-track-index="0" src="${clipRel}" muted playsinline></video></div>
   ${body}
 </div>
 <script>
 // Generated by tools/look-builder/testbuild.mjs — one paused timeline, registered synchronously.
 const tl = gsap.timeline({ paused: true });
-const cam = document.getElementById("cam");
+const cam = document.getElementById("cam"), camFg = document.getElementById("camFg");
+const camT = camFg ? [cam, camFg] : cam;
 ${plan.elBeats.some((b) => b.scene) ? AJ_RUNTIME : ""}
+const runLayer = (R, C) => {
 ${anims.join("\n")}
+};
+${layers.map(([layer, , c]) => `runLayer("#${id} .${layer}", ${c || "null"});`).join("\n")}
+${camAnims.join("\n")}
 tl.to({}, { duration: 0.01 }, ${D});
 window.__timelines = window.__timelines || {}; window.__timelines["${id}"] = tl;
 </script></body></html>
@@ -148,16 +163,44 @@ export function buildTestProject(look, { projectDir, clip, from = 0, dur = 8 }) 
   const clipDur = Math.min(dur, clipDuration(out));
   const S = stateFromLook(look);
   const plan = planFromLook(look, dur);
-  const html = compositionHtml(look, S, plan, "assets/" + out.split(/[\\/]/).pop(), clipDur, userFontFaces(look, dir));
-  writeFileSync(join(dir, "index.html"), html);
+  const clipRel = "assets/" + out.split(/[\\/]/).pop(), fonts = userFontFaces(look, dir);
+  const writeHtml = (matteRel = null) => writeFileSync(join(dir, "index.html"), compositionHtml(look, S, plan, clipRel, clipDur, fonts, matteRel));
+  writeHtml();
+  // does any part of the look pass behind the person? then the server cuts the person out of this excerpt
+  const needsMatte = hasBack((plan.hook ? plan.hook.render(S) : "") + plan.elBeats.map((b) => b.el.render(S)).join(""));
+  const matteKey = createHash("sha1").update([clip, statSync(clip).mtimeMs, start, dur].join("|")).digest("hex").slice(0, 12);
   writeFileSync(join(dir, "hyperframes.json"), JSON.stringify({ $schema: "https://hyperframes.heygen.com/schema/hyperframes.json", paths: { blocks: "compositions", components: "compositions/components", assets: "assets" } }, null, 2) + "\n");
   // Frames worth looking at: hook, first captions, each element entrance (+0.5 s), a late frame.
   const times = plan.sceneDur ? [1.5, 4.5, 8.5, 12.5, 14.5] : [0.9, 1.9, ...plan.elBeats.map((b) => +(b.t0 + 0.6).toFixed(2))];
   if (!plan.elBeats.length) times.push(4.5, 6.5);
-  return { dir, times: [...new Set(times.filter((t) => t < dur))].sort((a, b) => a - b), start };
+  return { dir, times: [...new Set(times.filter((t) => t < dur))].sort((a, b) => a - b), start, needsMatte, matteKey, clipFile: out, writeHtml };
 }
 
 // Run `npx hyperframes snapshot` on the test project. Resolves with the PNG file names.
+// Cut the person out of the test excerpt with `hyperframes remove-background` (local model, transparent WebM).
+// Cached per clip + excerpt in assets/matte-<key>.webm, so the next test of the same moment is instant.
+export function ensureMatte(dir, clipFile, key, { timeoutMs = 15 * 60 * 1000 } = {}) {
+  const name = `matte-${key}.webm`, outFile = join(dir, "assets", name);
+  if (existsSync(outFile) && statSync(outFile).size > 1000) return Promise.resolve({ rel: "assets/" + name, cached: true });
+  for (const f of readdirSync(join(dir, "assets"))) if (/^matte-.*\.webm$/i.test(f)) rmSync(join(dir, "assets", f), { force: true });
+  const cli = hyperframesCli();
+  const args = ["remove-background", clipFile, "-o", outFile, "--quality", "balanced"];
+  return new Promise((ok, fail) => {
+    const child = cli ? spawn(process.execPath, [cli, ...args], { cwd: root, windowsHide: true })
+      : spawn(process.platform === "win32" ? "npx.cmd" : "npx", ["hyperframes", ...args], { cwd: root, shell: process.platform === "win32", windowsHide: true });
+    let log = "";
+    child.stdout.on("data", (d) => (log += d)); child.stderr.on("data", (d) => (log += d));
+    const timer = setTimeout(() => { child.kill(); fail(new Error("o recorte demorou demais\n" + log.slice(-600))); }, timeoutMs);
+    child.on("error", (e) => { clearTimeout(timer); fail(e); });
+    child.on("close", (code) => { clearTimeout(timer); existsSync(outFile) && statSync(outFile).size > 1000 ? ok({ rel: "assets/" + name, cached: false, log: log.slice(-800) }) : fail(new Error(`remove-background saiu com código ${code}\n` + log.slice(-1200))); });
+  });
+}
+function hyperframesCli() {
+  const bin = join(root, "node_modules", "hyperframes", "package.json");
+  if (!existsSync(bin)) return null;
+  const cli = join(root, "node_modules", "hyperframes", JSON.parse(readFileSync(bin, "utf8")).bin?.hyperframes || "dist/cli.js");
+  return existsSync(cli) ? cli : null;
+}
 export function runSnapshot(dir, times, { timeoutMs = 180000 } = {}) {
   const outDir = join(dir, "snapshots");
   if (existsSync(outDir)) rmSync(outDir, { recursive: true, force: true });

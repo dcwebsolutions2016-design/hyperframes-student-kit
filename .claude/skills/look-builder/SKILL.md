@@ -37,7 +37,13 @@ captions, elements and motion over a frame of their own clip, and saves `video-p
 4. Starting point for the composition: `video-projects/<slug>/look-test/index.html` if the student pressed
    "Testar de verdade" (it is valid HyperFrames with the look's renderers and a paused timeline). Otherwise generate
    it with `node -e` importing `tools/look-builder/testbuild.mjs` (`buildTestProject`) and build from there.
-5. Elements marked "(matte)" need the person cut out: `npx hyperframes remove-background` or the matting scripts in
-   `video-colagem-oney` / `vsl`. Tell the student before running (slow).
+5. Layers. `look.json` → `matte.needed: true` means parts of the look pass **behind the person** (in the renderers they
+   carry `class="back"`; a part inside them that stays in front carries `class="front"`). Cut the person out of the
+   edited video with `npx hyperframes remove-background assets/<edited>.mp4 -o assets/matte.webm` (or the matting
+   scripts in `video-colagem-oney` / `vsl`, finer on hair). Tell the student before running: it is slow on the CPU.
+   Stack exactly like `look-test/index.html`: video (z 0) → a copy of the look with only `.back` visible (`.lb-back`,
+   z 1) → `<video src="assets/matte.webm">` following the same camera moves (z 2) → the look with `.back` hidden
+   (`.lb-front`, z 3) → captions (z 5). `LAYER_CSS` in `tools/look-builder/layers.mjs` has the visibility rules; both
+   copies run the same timeline. Regenerate the matte whenever the cut changes (a stale matte is a ghost presenter).
 6. Verify like every kit skill: lint 0 errors, snapshots at every beat, face never covered, safe zone, then render.
    Hand-off in Portuguese: file path, what was cut, the look applied, anything uncertain. Never publish.
