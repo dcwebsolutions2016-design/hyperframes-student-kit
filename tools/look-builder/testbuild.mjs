@@ -46,7 +46,7 @@ export function stateFromLook(look) {
   // fonts from the user's folder override roles (copied into the test project by buildTestProject)
   const font = { ...f };
   for (const [role, uf] of Object.entries(look.userFonts || look.fonts?.custom || {})) { if (!uf || !uf.file) continue; font[role] = `'uf-${uf.id}',${f[role] || f.display}`; if (role === "display") font.dw = 400; if (role === "body") font.bw = 400; }
-  return { v: { ...c.vars, ...(look.colours || {}) }, font, text, W, H, landscape: W > H, headTop: look.framing?.headTop ?? 620, capTop: look.framing?.capTop ?? 1150 };
+  return { v: { ...c.vars, ...(look.colours || {}) }, font, text, W, H, landscape: W > H, headTop: look.framing?.headTop ?? 620, capTop: look.framing?.capTop ?? 1150, ldsIn: look.captions?.lds?.entradaId || look.ldsEntrada || null };
 }
 function userFontFaces(look, dir) {
   const out = [];
@@ -96,8 +96,8 @@ export function compositionHtml(look, S, plan, clipRel, clipDur, extraCss = "", 
   if (plan.hook && plan.hook.id !== "none") anims.push(`{ const h = document.querySelector(R + " .hook"); if (h) { (${plan.hook.anim.toString()})(tl, h); tl.to(h, { opacity: 0, duration: 0.25 }, 3.2); } }`);
   if (plan.caps) anims.push(`{ const c = document.querySelector(R + " .caps"); if (c) { const ws = [...c.querySelectorAll(".w")]; const start = 0.3, dt = ${plan.capDt === "spread" ? `Math.max(0.34, (${plan.sceneDur} - start - 0.4) / (ws.length || 1))` : plan.capDt};
     ws.forEach((w, i) => { tl.set(w, { opacity: 1 }, start + i * dt); tl.set(w, { opacity: 0 }, start + (i + 1) * dt); });
-    ${plan.caps.mode === "phrase" ? `ws.forEach((x, i) => tl.fromTo(x, { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3 }, start + i * dt));` : ""}
-    ${plan.caps.mode === "lds" ? `ws.forEach((x, i) => tl.from([...x.querySelectorAll(".ldw")], { y: 14, opacity: 0, scale: 0.92, duration: 0.22, stagger: 0.18, ease: "back.out(1.6)" }, start + i * dt));` : ""} } }`);
+    ${plan.caps.mode === "phrase" && !plan.caps.capAnim ? `ws.forEach((x, i) => tl.fromTo(x, { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3 }, start + i * dt));` : ""}
+    ${plan.caps.capAnim ? `(${plan.caps.capAnim.toString()})(tl, c, start, dt);` : plan.caps.mode === "lds" ? `ws.forEach((x, i) => tl.from([...x.querySelectorAll(".ldw")], { y: 14, opacity: 0, scale: 0.92, duration: 0.22, stagger: 0.18, ease: "back.out(1.6)" }, start + i * dt));` : ""} } }`);
   plan.elBeats.forEach((b, i) => { if (b.scene) { anims.push(`{ const e = document.querySelectorAll(R + " .el")[${i}]; if (e) { const sub = gsap.timeline(); (${b.el.anim.toString()})(sub, e, C); tl.add(sub, 0); } }`); return; } anims.push(`{ const e = document.querySelectorAll(R + " .el")[${i}]; if (e) { const t0 = ${b.t0};
     const sub = gsap.timeline(); (${(b.el.anim || b.motion.anim).toString()})(sub, e, C); tl.add(sub, t0);
     if (e.querySelector(".num,.bar")) { const t = gsap.timeline(); (${byId(MOTIONS, "count-tick").anim.toString()})(t, e); tl.add(t, t0 + 0.2); }
@@ -106,7 +106,7 @@ export function compositionHtml(look, S, plan, clipRel, clipDur, extraCss = "", 
     const strip = e.querySelector(".strip"); if (strip) tl.to(strip, { x: -900, duration: 4, ease: "none" }, t0);
     tl.to(e, { opacity: 0, duration: 0.25 }, t0 + ${b.el.anim ? 3.0 : 2.6}); } }`); });
   const camAnims = plan.camM.map((m, i) => `{ const t = gsap.timeline(); (${m.anim.toString()})(t, null, camT); tl.add(t, ${3 + i * 3}); }`);
-  const google = `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Fraunces:ital,wght@0,300;0,900;1,900&family=Archivo:wght@400;500;700&family=Playfair+Display:wght@700&family=Space+Mono&display=block">`;
+  const google = `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Figtree:ital,wght@0,600;0,900;1,900&family=Bodoni+Moda:ital,wght@1,400&family=EB+Garamond:ital@0;1&family=Bebas+Neue&family=Fraunces:ital,wght@0,300;0,900;1,900&family=Archivo:wght@400;500;700&family=Playfair+Display:wght@700&family=Space+Mono&display=block">`;
   return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><title>Look test — ${esc(look.project || "look")}</title>
 <script src="assets/gsap.min.js"></script>

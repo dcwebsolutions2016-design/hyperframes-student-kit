@@ -4,6 +4,7 @@
 // Each option carries `skills` (where it is native) so the review step can warn about mixes a skill's DESIGN.md forbids.
 // Render functions write 1080-wide (or 1920-wide) HTML that the app scales into a card; `S` is the current state.
 
+import { ldsCaptionFor } from "./lds.mjs";
 export const SKILLS = {
   "reel-oney": { name: "Reel celular", cmd: "/reel-oney", note: "Cru, editado no celular. Nada de motion." },
   "reel-editorial-oney": { name: "Reel editorial", cmd: "/reel-editorial-oney", note: "Polido, serifada amarelo-manteiga, cortes secos." },
@@ -158,26 +159,8 @@ function ldsStyle(S, modelo = "") {
   if (/minimal|clean|cinza|branc/.test(m)) return { big: `${body(S, 104, "font-weight:600;line-height:1")};color:${/branc|minimal/.test(m) ? "#fff" : S.v.acc}`, caps: false };
   return { big: `${disp(S, 118, "line-height:1")};color:${S.v.acc}`, caps: true };
 }
-export function ldsCaption(pronto) {
-  return {
-    id: `lds:${pronto.id}`, name: pronto.name, desc: `${pronto.modelo} · entrada ${pronto.entrada} · saída ${pronto.saida}`,
-    skills: ["legenda-dinamica-studio"], mode: "lds", lds: pronto,
-    render: (S) => {
-      const ws = words(S); const k = kw(S).toLowerCase();
-      const st = ldsStyle(S, pronto.modelo);
-      const screens = []; let cur = [];
-      for (const w of ws) { cur.push(w); if (cur.length >= 3 || w.toLowerCase() === k) { screens.push(cur); cur = []; } }
-      if (cur.length) screens.push(cur);
-      const big = (w) => w.toLowerCase() === k || w.length >= 7;
-      const cs = (w) => (st.caps ? String(w).toUpperCase() : caseOf(S, w));
-      return `<div class="ov caps lds" style="left:0;top:${S.capTop - 160}px;width:${S.W}px;height:360px">${screens.map((sc, i) => {
-        const bi = Math.max(0, sc.findIndex(big));
-        return `<div class="w scr" data-i="${i}" style="position:absolute;left:0;width:${S.W}px;top:0;opacity:0;text-align:center;color:#fff;text-shadow:0 0 12px rgba(255,255,255,.25),0 4px 24px rgba(0,0,0,.5)">
-          ${sc.map((w, j) => `<span class="ldw" style="display:block;${j === bi ? st.big : `${body(S, j < bi ? 54 : 62, "line-height:1.1")};${j < bi ? "text-align:left;padding-left:22%" : j > bi ? "text-align:right;padding-right:22%" : ""}`}">${esc(j === bi ? cs(w) : caseOf(S, w))}</span>`).join("")}</div>`;
-      }).join("")}</div>`;
-    },
-  };
-}
+// Legenda Dinâmica captions come from the EffectCraft engine port (lds.mjs): same models, entrances and exits as the catalogue
+export function ldsCaption(pronto) { return ldsCaptionFor(pronto); }
 function chunk(ws, n, keyword) {
   const out = []; let cur = [];
   for (const w of ws) {

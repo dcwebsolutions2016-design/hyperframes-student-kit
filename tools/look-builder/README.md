@@ -172,6 +172,14 @@ USER_FONTS="C:\caminho\da\pasta" node tools/look-builder/server.mjs
   por etapa: montando, recortando a pessoa, capturando os quadros) e **Salvar e usar no Claude** (grava e copia o
   pedido). JSON, copiar o pedido e as opções avançadas (códigos Brand Nat, skill e conflitos) ficam no menu **Avançado**.
   As Legendas Dinâmicas aparecem sempre no passo Legendas e na aba Legenda do Ajustar.
+- **Legenda Dinâmica igual ao catálogo** (`lds.mjs`): porta para o navegador do motor do EffectCraft
+  (`plugin/scripts/motor/lds_core.jsx`): os mesmos 38 modelos, 33 prontos, 27 entradas e 15 saídas, com os mesmos
+  tamanhos, cores, tracking, brilhos, sombras, marca-texto / pílula / sublinhado / círculo e os mesmos keyframes
+  (d = 0,22 s na entrada, 0,16 s na saída). As palavras são divididas em telas pela regra do `planner.py`
+  (conectivos pequenos, a palavra mais forte grande). A entrada escolhida no passo Motion substitui a do pronto no palco
+  e no render de verdade; os cards do passo Legendas mostram cada pronto com a entrada original. Fontes: as do Windows
+  que o motor usa (Arial Black, Impact, Bahnschrift, Garamond, Bookman, Cooper, Brush Script, Segoe Script) e Figtree,
+  Bodoni Moda e EB Garamond do Google como reserva.
 - **Edit Review** (`/review?project=<slug>`, botão "Edit Review" no topo do painel): assista o corte do projeto, deixe
   notas por tempo (N), uma lista de edits com tipo, in/out e status (E ou Shift+Enter; "Importar cortes da EDL" traz
   os cortes do cut-silences / cut-mistakes já marcados como feitos), e a transcrição clicável que segue o player.

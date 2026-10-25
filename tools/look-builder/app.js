@@ -124,7 +124,7 @@ const video = $("#video"), stage = $("#stage"), world = $("#world"), worldBack =
 // ------------------------------------------------------------------ derived style state for renderers
 function S() {
   const c = byId(COLOURS, L.colours) || COLOURS[0];
-  return { v: c.vars, font: fontWithUser(byId(FONTS, L.fonts) || FONTS[0]), text: UI.text, W: UI.W, H: UI.H, landscape: UI.landscape, headTop: UI.headTop, capTop: UI.capTop, images: UI.images || [] };
+  return { v: c.vars, font: fontWithUser(byId(FONTS, L.fonts) || FONTS[0]), text: UI.text, W: UI.W, H: UI.H, landscape: UI.landscape, headTop: UI.headTop, capTop: UI.capTop, images: UI.images || [], ldsIn: L.ldsEntrada || null };
 }
 function withPick(over) { const s = S(); if (over.colours) s.v = byId(COLOURS, over.colours).vars; if (over.fonts) s.font = fontWithUser(byId(FONTS, over.fonts)); return s; }
 // Fonts from the user's own folder override roles of the chosen pair (display / body / serif / hand / mono).
@@ -389,7 +389,7 @@ function wireCards(step, multi) {
   });
 }
 function pick(step, id, multi) {
-  if (id.startsWith("lds-in:")) { const v = id.slice(7); L.ldsEntrada = L.ldsEntrada === v ? null : v; L.preset = null; return; }
+  if (id.startsWith("lds-in:")) { const v = id.slice(7); L.ldsEntrada = L.ldsEntrada === v ? null : v; L.preset = null; rebuildMain(); return; }
   if (multi) { const a = L[step]; const i = a.indexOf(id); i >= 0 ? a.splice(i, 1) : a.push(id); }
   else L[step] = L[step] === id ? null : id;
   if (step === "captions" && !isLds()) L.ldsEntrada = null;
@@ -621,7 +621,7 @@ function fillCard(step, o, el) {
     return;
   }
   if (step === "hook") { w.innerHTML = o.render(S()); const h = $(".hook", w); if (h) o.anim(tl, h); tl.to({}, { duration: 1.2 }); return; }
-  if (step === "captions") { w.innerHTML = o.render(S()); playCaptions(tl, w, o, 0.1); tl.to({}, { duration: 0.8 }); return; }
+  if (step === "captions") { w.innerHTML = o.render(o.mode === "lds" ? { ...S(), ldsIn: null } : S()); playCaptions(tl, w, o, 0.1); tl.to({}, { duration: 0.8 }); return; }
   if (step === "elements") {
     w.innerHTML = o.render(S());
     const e = $(".el", w); if (!e) return;
